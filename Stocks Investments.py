@@ -2,230 +2,402 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
+import time
 
 # Page configuration
 st.set_page_config(
-    page_title="Futubull-Style Advanced Stock Market Simulator",
+    page_title="HinaHinaPro - Live Market & Margin Terminal",
     page_icon="📈",
     layout="wide"
 )
 
-# Initialize Session State for persistence across interactions
+# Initialize Session State
 if "stocks" not in st.session_state:
     st.session_state.stocks = {
-        "0700.HK": {"name": "Tencent Holdings", "market": "HK", "price": 315.20, "history": [315.20], "volatility": 0.025, "sector": "Tech"},
-        "9988.HK": {"name": "Alibaba Group", "market": "HK", "price": 74.50, "history": [74.50], "volatility": 0.03, "sector": "E-Commerce"},
-        "NVDA":    {"name": "NVIDIA Corporation", "market": "US", "price": 880.00, "history": [880.00], "volatility": 0.045, "sector": "Semiconductors/AI"},
-        "MSFT":    {"name": "Microsoft Corporation", "market": "US", "price": 420.00, "history": [420.00], "volatility": 0.018, "sector": "Cloud/Software"},
-        "AAPL":    {"name": "Apple Inc.", "market": "US", "price": 182.50, "history": [182.50], "volatility": 0.02, "sector": "Consumer Tech"},
-        "TSLA":    {"name": "Tesla Inc.", "market": "US", "price": 235.00, "history": [235.00], "volatility": 0.05, "sector": "EV/Automotive"},
-        "GOOG":    {"name": "Alphabet Inc. (Google)", "market": "US", "price": 175.00, "history": [175.00], "volatility": 0.022, "sector": "Digital Advertising"},
-        "BTC":     {"name": "Bitcoin Index", "market": "Crypto", "price": 64200.0, "history": [64200.0], "volatility": 0.07, "sector": "Crypto"},
+        "0700.HK": {"name": "Tencent Holdings", "market": "HK", "price": 315.20, "history": [315.20], "volatility": 0.015},
+        "9988.HK": {"name": "Alibaba Group", "market": "HK", "price": 74.50, "history": [74.50], "volatility": 0.018},
+        "NVDA":    {"name": "NVIDIA Corporation", "market": "US", "price": 880.00, "history": [880.00], "volatility": 0.025},
+        "MSFT":    {"name": "Microsoft Corporation", "market": "US", "price": 420.00, "history": [420.00], "volatility": 0.012},
+        "AAPL":    {"name": "Apple Inc.", "market": "US", "price": 182.50, "history": [182.50], "volatility": 0.014},
+        "TSLA":    {"name": "Tesla Inc.", "market": "US", "price": 235.00, "history": [235.00], "volatility": 0.030},
+        "GOOG":    {"name": "Alphabet Inc.", "market": "US", "price": 175.00, "history": [175.00], "volatility": 0.015},
+        "BTC":     {"name": "Bitcoin Index", "market": "Crypto", "price": 64200.0, "history": [64200.0], "volatility": 0.035},
     }
 
 if "cash" not in st.session_state:
-    st.session_state.cash = 200000.0  # Starting capital
+    st.session_state.cash = 100000.0
+
+if "bank_loan" not in st.session_state:
+    st.session_state.bank_loan = 0.0  # Max 1,000,000.0
 
 if "portfolio" not in st.session_state:
-    st.session_state.portfolio = {sym: 0 for sym in st.session_state.stocks}
+    # Tracks net shares (positive = long, negative = short)
+    st.session_state.portfolio = {sym: 0.0 for sym in st.session_state.stocks}
+
+if "margin_debt" not in st.session_state:
+    # Tracks embedded leverage debt per ticker
+    st.session_state.margin_debt = {sym: 0.0 for sym in st.session_state.stocks}
 
 if "trade_history" not in st.session_state:
     st.session_state.trade_history = []
 
 if "news_log" not in st.session_state:
-    st.session_state.news_log = [("Market opened. Live Futubull trading feed initialized.", "System", 0)]
+    st.session_state.news_log = [
+        "🔔 HinaHinaPro Live Feed Connected. Markets are open and fluctuating in real time."
+    ]
 
-# Predefined breaking news events combining Real-world and Original shocks
+# Raw News Pool: (Headline, Hidden Target, Hidden Impact)
+# Neither the target nor the impact is displayed to the user.
 NEWS_POOL = [
-    ("🌐 US Federal Reserve unexpectedly signals interest rate cuts amid cooling inflation.", "Macro", 0.04),
-    ("⚠️ Geopolitical supply chain bottlenecks impact global semiconductor shipments.", "Macro", -0.03),
-    ("🚀 NVIDIA announces next-generation Blackwell Ultra chips with record enterprise orders.", "NVDA", 0.08),
-    ("☁️ Microsoft reports staggering Azure cloud acceleration driven by enterprise AI adoption.", "MSFT", 0.06),
-    ("tencent Tencent announces record gaming monetization and AI integration roadmap.", "0700.HK", 0.07),
-    ("📉 Antitrust regulators tighten compliance review on major e-commerce platforms.", "9988.HK", -0.06),
-    ("⚡ Apple unveils revolutionary AR/VR spatial headset iteration with high consumer demand.", "AAPL", 0.05),
-    ("🚨 NHTSA launches regulatory inquiry into autonomous driving software features.", "TSLA", -0.09),
-    ("🔍 Google unveils breakthrough quantum computing milestone outperforming competitors.", "GOOG", 0.07),
-    ("🪙 Spot Bitcoin ETF sees massive institutional inflows breaking daily records.", "BTC", 0.08),
+    ("BREAKING: Central bank minutes hint at faster-than-expected monetary easing this quarter.", "Macro", 0.035),
+    ("ALERT: Global shipping lanes face sudden bottleneck; freight and component costs surge.", "Macro", -0.025),
+    ("TECH WIRE: Next-gen AI data center cluster orders exceed annual capacity forecasts.", "NVDA", 0.065),
+    ("CLOUD REPORT: Enterprise software spending accelerates as Fortune 500 firms migrate workloads.", "MSFT", 0.045),
+    ("ASIA MARKETS: Mobile gaming approvals surge alongside major social ecosystem ad growth.", "0700.HK", 0.055),
+    ("REGULATORY: Cross-border e-commerce platforms face heightened antitrust scrutiny.", "9988.HK", -0.050),
+    ("SUPPLY CHAIN: Flagship smartphone pre-orders beat consensus estimates across Asia and Europe.", "AAPL", 0.040),
+    ("AUTO NEWS: Safety regulators open formal review into full self-driving fleet telemetry.", "TSLA", -0.075),
+    ("SEARCH & AI: New multimodal search architecture drives record digital ad click-through rates.", "GOOG", 0.050),
+    ("DIGITAL ASSETS: Sovereign wealth fund disclosures reveal fresh allocations into spot crypto.", "BTC", 0.070),
+    ("ENERGY: Lithium refining capacity expands rapidly, slashing battery pack production costs.", "TSLA", 0.055),
+    ("CHIPS: Export licensing restrictions tightened on high-bandwidth memory modules.", "NVDA", -0.060),
 ]
 
-# Sidebar Controls (Futubull Trading Desk Style)
-st.sidebar.title("🎮 Futubull Pro Terminal")
-st.sidebar.markdown("---")
+def advance_market():
+    """Simulates one autonomous market tick with random walk + hidden news shocks."""
+    # 1. Apply bank loan & margin interest (tiny per-tick accrual)
+    if st.session_state.bank_loan > 0:
+        interest = st.session_state.bank_loan * 0.0001
+        st.session_state.bank_loan += interest
 
-auto_advance = st.sidebar.checkbox("⚡ Enable Auto Simulation Ticks", value=False)
-if st.sidebar.button("⏩ Advance Market Tick", use_container_width=True) or auto_advance:
-    # 1. Price Fluctuations via Geometric Brownian Motion approximation
+    # 2. Geometric Brownian Motion price fluctuations
     for sym, data in st.session_state.stocks.items():
-        shock = np.random.normal(0.0005, data["volatility"])
+        drift = 0.0002
+        shock = np.random.normal(drift, data["volatility"])
         new_price = max(0.5, data["price"] * (1 + shock))
         data["price"] = round(new_price, 2)
         data["history"].append(data["price"])
-        if len(data["history"]) > 40:
+        if len(data["history"]) > 50:
             data["history"].pop(0)
 
-    # 2. Breaking News Event Trigger (35% chance per tick)
-    if random.random() < 0.35:
+        # Check margin liquidation if leveraged position equity drops below zero
+        shares = st.session_state.portfolio[sym]
+        debt = st.session_state.margin_debt[sym]
+        if shares > 0 and debt > 0:
+            position_val = shares * data["price"]
+            if position_val <= debt * 1.02:  # Maintenance margin call triggered
+                st.session_state.portfolio[sym] = 0.0
+                st.session_state.margin_debt[sym] = 0.0
+                st.session_state.trade_history.insert(0, ("LIQUIDATED", sym, round(shares, 2), data["price"], "Margin Call"))
+                st.session_state.news_log.insert(0, f"⚠️ MARGIN CALL: Leveraged position in {sym} was forcibly liquidated due to insufficient equity.")
+
+    # 3. Unfiltered Breaking News Trigger (25% chance per tick)
+    if random.random() < 0.25:
         headline, target, impact = random.choice(NEWS_POOL)
         if target == "Macro":
             for sym in st.session_state.stocks:
-                st.session_state.stocks[sym]["price"] = round(max(0.5, st.session_state.stocks[sym]["price"] * (1 + impact)), 2)
+                noise = random.uniform(0.7, 1.3)
+                p = st.session_state.stocks[sym]["price"]
+                st.session_state.stocks[sym]["price"] = round(max(0.5, p * (1 + impact * noise)), 2)
+                st.session_state.stocks[sym]["history"][-1] = st.session_state.stocks[sym]["price"]
         elif target in st.session_state.stocks:
             old_p = st.session_state.stocks[target]["price"]
             new_p = max(0.5, old_p * (1 + impact))
             st.session_state.stocks[target]["price"] = round(new_p, 2)
             st.session_state.stocks[target]["history"][-1] = st.session_state.stocks[target]["price"]
-        
-        st.session_state.news_log.insert(0, (headline, target, impact))
-        if len(st.session_state.news_log) > 8:
+
+        # Append ONLY the raw headline — no ticker or percentage hints
+        st.session_state.news_log.insert(0, f"📰 {headline}")
+        if len(st.session_state.news_log) > 12:
             st.session_state.news_log.pop()
 
-if st.sidebar.button("🔄 Reset Account & Portfolio", use_container_width=True):
+# Sidebar: Live Market Engine & Bank Credit Facility
+st.sidebar.title("⚡ HinaHinaPro Engine")
+live_market = st.sidebar.toggle("🟢 Live Autonomous Market", value=True)
+tick_speed = st.sidebar.select_slider("Market Tick Speed (sec)", options=[1.0, 2.0, 3.0, 5.0], value=2.0)
+
+if st.sidebar.button("⏭️ Force Single Tick", use_container_width=True):
+    advance_market()
+    st.rerun()
+
+st.sidebar.divider()
+
+# Manual Bank Loan Section (Max $1,000,000)
+st.sidebar.subheader("🏦 Commercial Bank Facility")
+max_loan = 1000000.0
+remaining_credit = max(0.0, max_loan - st.session_state.bank_loan)
+st.sidebar.write(f"**Current Bank Debt:** ${st.session_state.bank_loan:,.2f}")
+st.sidebar.write(f"**Available Credit:** ${remaining_credit:,.2f}")
+
+loan_amount = st.sidebar.number_input(
+    "Enter Loan / Repayment Amount ($)",
+    min_value=0.0,
+    max_value=max_loan,
+    value=50000.0,
+    step=5000.0
+)
+
+col_b1, col_b2 = st.sidebar.columns(2)
+with col_b1:
+    if st.button("Borrow", use_container_width=True):
+        if loan_amount <= 0:
+            st.sidebar.error("Enter an amount > 0.")
+        elif st.session_state.bank_loan + loan_amount > max_loan:
+            st.sidebar.error("Exceeds $1,000,000 bank credit limit!")
+        else:
+            st.session_state.bank_loan += loan_amount
+            st.session_state.cash += loan_amount
+            st.sidebar.success(f"Borrowed ${loan_amount:,.2f}")
+            st.rerun()
+
+with col_b2:
+    if st.button("Repay", use_container_width=True):
+        if loan_amount <= 0:
+            st.sidebar.error("Enter an amount > 0.")
+        elif st.session_state.bank_loan == 0:
+            st.sidebar.info("No active bank loan.")
+        else:
+            repay_actual = min(loan_amount, st.session_state.bank_loan)
+            if st.session_state.cash >= repay_actual:
+                st.session_state.cash -= repay_actual
+                st.session_state.bank_loan -= repay_actual
+                st.sidebar.success(f"Repaid ${repay_actual:,.2f}")
+                st.rerun()
+            else:
+                st.sidebar.error("Insufficient cash to repay!")
+
+st.sidebar.divider()
+if st.sidebar.button("🔄 Reset HinaHinaPro Account", use_container_width=True):
     base_prices = {
-        "0700.HK": 315.20, "9988.HK": 74.50, "NVDA": 880.00, 
-        "MSFT": 420.00, "AAPL": 182.50, "TSLA": 235.00, 
+        "0700.HK": 315.20, "9988.HK": 74.50, "NVDA": 880.00,
+        "MSFT": 420.00, "AAPL": 182.50, "TSLA": 235.00,
         "GOOG": 175.00, "BTC": 64200.0
     }
     for sym in st.session_state.stocks:
         st.session_state.stocks[sym]["price"] = base_prices[sym]
         st.session_state.stocks[sym]["history"] = [base_prices[sym]]
-    st.session_state.cash = 200000.0
-    st.session_state.portfolio = {sym: 0 for sym in st.session_state.stocks}
+    st.session_state.cash = 100000.0
+    st.session_state.bank_loan = 0.0
+    st.session_state.portfolio = {sym: 0.0 for sym in st.session_state.stocks}
+    st.session_state.margin_debt = {sym: 0.0 for sym in st.session_state.stocks}
     st.session_state.trade_history = []
-    st.session_state.news_log = [("Account reset successfully.", "System", 0)]
+    st.session_state.news_log = ["🔔 HinaHinaPro Account Reset. Markets live."]
     st.rerun()
 
-# Main Dashboard Layout - Futubull Pro Style
-st.title("🐂 Futubull Pro - Advanced Market & Trading Simulator")
+# Header & Account Metrics
+st.title("🐂 HinaHinaPro — Live Institutional & Retail Trading Terminal")
 
-# Financial Overview Metrics Bar
-col1, col2, col3, col4 = st.columns(4)
-portfolio_market_value = sum(st.session_state.portfolio[sym] * st.session_state.stocks[sym]["price"] for sym in st.session_state.stocks)
-total_net_worth = st.session_state.cash + portfolio_market_value
-total_pnl = total_net_worth - 200000.0
-pnl_pct = (total_pnl / 200000.0) * 100
+gross_asset_value = sum(
+    st.session_state.portfolio[sym] * st.session_state.stocks[sym]["price"]
+    for sym in st.session_state.stocks
+)
+total_margin_debt = sum(st.session_state.margin_debt.values())
+net_worth = st.session_state.cash + gross_asset_value - total_margin_debt - st.session_state.bank_loan
+net_pnl = net_worth - 100000.0
 
-col1.metric("💰 Cash Balance", f"${st.session_state.cash:,.2f}")
-col2.metric("📊 Portfolio Value", f"${portfolio_market_value:,.2f}")
-col3.metric("🏆 Total Net Worth", f"${total_net_worth:,.2f}")
-col4.metric("📈 Cumulative P&L", f"${total_pnl:+,.2f}", delta=f"{pnl_pct:+.2f}%")
-
-st.divider()
-
-# Market Quotes Grid & Interactive Trading Panel
-st.subheader("📋 Market Watch & Order Execution Desk")
-
-market_tabs = st.tabs(["🌐 All Markets", "🇭🇰 HK Stocks", "🇺🇸 US Tech Giants", "🪙 Cryptocurrencies"])
-
-with market_tabs[0]:
-    # Display tickers in rows of 4 columns
-    symbols = list(st.session_state.stocks.items())
-    for i in range(0, len(symbols), 4):
-        cols = st.columns(4)
-        for j in range(4):
-            if i + j < len(symbols):
-                sym, data = symbols[i + j]
-                with cols[j]:
-                    prev_p = data["history"][-2] if len(data["history"]) > 1 else data["price"]
-                    change_pct = ((data["price"] - prev_p) / prev_p) * 100
-                    
-                    st.markdown(f"#### **{sym}**")
-                    st.caption(f"{data['name']} ({data['sector']})")
-                    st.metric("Price", f"${data['price']:,.2f}", delta=f"{change_pct:+.2f}%")
-                    st.line_chart(pd.DataFrame(data["history"], columns=["Price"]), height=90)
-                    st.text(f"Holding: {st.session_state.portfolio[sym]} shares")
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("💵 Liquid Cash", f"${st.session_state.cash:,.2f}")
+m2.metric("📊 Gross Holdings", f"${gross_asset_value:,.2f}")
+m3.metric("🏦 Bank Loan Debt", f"${st.session_state.bank_loan:,.2f}")
+m4.metric("⚡ Margin Leverage Debt", f"${total_margin_debt:,.2f}")
+m5.metric("🏆 True Net Worth", f"${net_worth:,.2f}", delta=f"${net_pnl:+,.2f}")
 
 st.divider()
 
-# Advanced Order Execution Form (Simulating Futubull Order Ticket)
-st.subheader("🛒 Place Order (Market / Limit Simulation)")
-order_col1, order_col2, order_col3 = st.columns(3)
+# Live Market Grid
+st.subheader("📡 Live Market Watchlist")
+symbols = list(st.session_state.stocks.items())
+for i in range(0, len(symbols), 4):
+    cols = st.columns(4)
+    for j in range(4):
+        if i + j < len(symbols):
+            sym, data = symbols[i + j]
+            with cols[j]:
+                prev_p = data["history"][-2] if len(data["history"]) > 1 else data["price"]
+                chg_pct = ((data["price"] - prev_p) / prev_p) * 100
+                st.markdown(f"#### **{sym}** · {data['market']}")
+                st.caption(data["name"])
+                st.metric("Last Price", f"${data['price']:,.2f}", delta=f"{chg_pct:+.2f}%")
+                st.line_chart(pd.DataFrame(data["history"], columns=["Price"]), height=85)
 
-with order_col1:
-    selected_stock = st.selectbox("Select Asset Symbol", list(st.session_state.stocks.keys()))
-    current_asset_price = st.session_state.stocks[selected_stock]["price"]
-    st.info(f"Current Market Price for **{selected_stock}**: **${current_asset_price:,.2f}**")
+st.divider()
 
-with order_col2:
-    order_type = st.radio("Order Type", ["Market Buy", "Market Sell", "Short Sell", "Cover Short"])
-    quantity = st.number_input("Quantity (Shares/Units)", min_value=1, max_value=10000, value=1, step=1)
+# Multi-Method Order Execution Desk
+st.subheader("🎯 HinaHinaPro Multi-Method Execution Desk")
+oc1, oc2, oc3 = st.columns([1.2, 1.3, 1.5])
 
-with order_col3:
-    total_cost = current_asset_price * quantity
-    st.markdown("### Order Summary")
-    st.write(f"**Estimated Total:** ${total_cost:,.2f}")
+with oc1:
+    selected_sym = st.selectbox("Select Ticker", list(st.session_state.stocks.keys()))
+    curr_price = st.session_state.stocks[selected_sym]["price"]
+    st.info(f"**{selected_sym}** Live Quote: **${curr_price:,.2f}**")
+
+    trade_method = st.selectbox(
+        "Trading Method",
+        [
+            "Spot Buy (Cash)",
+            "Spot Sell (Close Long)",
+            "Leveraged Multiplier (Margin Loan)",
+            "Short Sell (Bearish)",
+            "Cover Short Position",
+            "Banker Method (Institutional Block)"
+        ]
+    )
+
+with oc2:
+    if trade_method == "Leveraged Multiplier (Margin Loan)":
+        margin_deposit = st.number_input("Your Cash Margin Deposit ($)", min_value=100.0, max_value=1000000.0, value=5000.0, step=500.0)
+        multiplier = st.select_slider("Leverage Multiplier", options=[2, 5, 10, 20, 50, 100], value=100)
+        total_exposure = margin_deposit * multiplier
+        borrowed_margin = total_exposure - margin_deposit
+        est_shares = total_exposure / curr_price
+        st.write(f"**Total Position Exposure:** ${total_exposure:,.2f}")
+        st.write(f"**Auto-Margin Loan:** ${borrowed_margin:,.2f}")
+        st.write(f"**Shares Controlled:** {est_shares:,.4f}")
+    elif trade_method == "Banker Method (Institutional Block)":
+        block_shares = st.number_input("Institutional Block Size (Shares)", min_value=100, max_value=50000, value=500, step=100)
+        discount_price = round(curr_price * 0.985, 2)  # 1.5% institutional block discount
+        total_block_cost = block_shares * discount_price
+        st.write(f"**Institutional Discount Price (-1.5%):** ${discount_price:,.2f}")
+        st.write(f"**Total Block Settlement:** ${total_block_cost:,.2f}")
+        if st.session_state.bank_loan > 0:
+            st.error("🚫 Active Bank Loan Detected! Banker Method requires $0 bank debt.")
+        else:
+            st.success("✅ Debt-Free Credit Check Passed")
+    else:
+        qty = st.number_input("Quantity (Shares / Units)", min_value=1.0, max_value=100000.0, value=10.0, step=1.0)
+        order_val = qty * curr_price
+        st.write(f"**Order Value:** ${order_val:,.2f}")
+
+with oc3:
+    st.markdown("### Execution Ticket")
     st.write(f"**Available Cash:** ${st.session_state.cash:,.2f}")
-    
-    if st.button("🚀 Submit Order", use_container_width=True):
-        if order_type == "Market Buy":
-            if st.session_state.cash >= total_cost:
-                st.session_state.cash -= total_cost
-                st.session_state.portfolio[selected_stock] += quantity
-                st.session_state.trade_history.insert(0, ("BUY", selected_stock, quantity, current_asset_price))
-                st.success(f"Successfully bought {quantity} shares of {selected_stock} at ${current_asset_price:,.2f}!")
+    st.write(f"**Current Position ({selected_sym}):** {st.session_state.portfolio[selected_sym]:,.4f} shares")
+
+    if st.button("🚀 Execute Order Now", use_container_width=True):
+        if trade_method == "Spot Buy (Cash)":
+            cost = qty * curr_price
+            if st.session_state.cash >= cost:
+                st.session_state.cash -= cost
+                st.session_state.portfolio[selected_sym] += qty
+                st.session_state.trade_history.insert(0, ("SPOT BUY", selected_sym, qty, curr_price, "Cash"))
+                st.success(f"Bought {qty} {selected_sym} @ ${curr_price:,.2f}")
                 st.rerun()
             else:
-                st.error("Insufficient cash to complete transaction!")
-                
-        elif order_type == "Market Sell":
-            if st.session_state.portfolio[selected_stock] >= quantity:
-                st.session_state.cash += total_cost
-                st.session_state.portfolio[selected_stock] -= quantity
-                st.session_state.trade_history.insert(0, ("SELL", selected_stock, quantity, current_asset_price))
-                st.success(f"Successfully sold {quantity} shares of {selected_stock} at ${current_asset_price:,.2f}!")
+                st.error("Insufficient cash balance.")
+
+        elif trade_method == "Spot Sell (Close Long)":
+            if st.session_state.portfolio[selected_sym] >= qty:
+                proceeds = qty * curr_price
+                # Proportionally pay off any margin debt attached to this ticker
+                if st.session_state.margin_debt[selected_sym] > 0:
+                    ratio = qty / st.session_state.portfolio[selected_sym]
+                    debt_repaid = st.session_state.margin_debt[selected_sym] * ratio
+                    st.session_state.margin_debt[selected_sym] -= debt_repaid
+                    net_proceeds = proceeds - debt_repaid
+                    st.session_state.cash += net_proceeds
+                else:
+                    st.session_state.cash += proceeds
+                st.session_state.portfolio[selected_sym] -= qty
+                st.session_state.trade_history.insert(0, ("SPOT SELL", selected_sym, qty, curr_price, "Closed"))
+                st.success(f"Sold {qty} {selected_sym} @ ${curr_price:,.2f}")
                 st.rerun()
             else:
-                st.error("You do not own enough shares to sell this quantity!")
-                
-        elif order_type == "Short Sell":
-            st.session_state.cash += total_cost
-            st.session_state.portfolio[selected_stock] -= quantity
-            st.session_state.trade_history.insert(0, ("SHORT", selected_stock, quantity, current_asset_price))
-            st.warning(f"Shorted {quantity} units of {selected_stock}. Monitor price movement!")
+                st.error("Not enough shares held to sell.")
+
+        elif trade_method == "Leveraged Multiplier (Margin Loan)":
+            if st.session_state.cash >= margin_deposit:
+                st.session_state.cash -= margin_deposit
+                st.session_state.portfolio[selected_sym] += est_shares
+                st.session_state.margin_debt[selected_sym] += borrowed_margin
+                st.session_state.trade_history.insert(
+                    0, (f"{multiplier}x MARGIN BUY", selected_sym, round(est_shares, 4), curr_price, f"Loan ${borrowed_margin:,.0f}")
+                )
+                st.success(f"Placed ${total_exposure:,.2f} ({multiplier}x) in {selected_sym} using ${margin_deposit:,.2f} cash!")
+                st.rerun()
+            else:
+                st.error("Insufficient cash for margin deposit.")
+
+        elif trade_method == "Short Sell (Bearish)":
+            proceeds = qty * curr_price
+            st.session_state.cash += proceeds
+            st.session_state.portfolio[selected_sym] -= qty
+            st.session_state.trade_history.insert(0, ("SHORT SELL", selected_sym, qty, curr_price, "Short"))
+            st.warning(f"Shorted {qty} {selected_sym} @ ${curr_price:,.2f}")
             st.rerun()
-            
-        elif order_type == "Cover Short":
-            if st.session_state.cash >= total_cost:
-                st.session_state.cash -= total_cost
-                st.session_state.portfolio[selected_stock] += quantity
-                st.session_state.trade_history.insert(0, ("COVER", selected_stock, quantity, current_asset_price))
-                st.success(f"Covered short position for {quantity} units of {selected_stock}!")
-                st.rerun()
+
+        elif trade_method == "Cover Short Position":
+            if st.session_state.portfolio[selected_sym] < 0:
+                cover_qty = min(qty, abs(st.session_state.portfolio[selected_sym]))
+                cost = cover_qty * curr_price
+                if st.session_state.cash >= cost:
+                    st.session_state.cash -= cost
+                    st.session_state.portfolio[selected_sym] += cover_qty
+                    st.session_state.trade_history.insert(0, ("COVER SHORT", selected_sym, cover_qty, curr_price, "Covered"))
+                    st.success(f"Covered {cover_qty} short shares of {selected_sym}")
+                    st.rerun()
+                else:
+                    st.error("Insufficient cash to buy back shares.")
             else:
-                st.error("Insufficient cash to cover short position!")
+                st.error("No open short position for this stock.")
+
+        elif trade_method == "Banker Method (Institutional Block)":
+            if st.session_state.bank_loan > 0:
+                st.error("❌ REJECTED: Institutional Banker Method is strictly prohibited while you have an active Bank Loan! Repay your bank loan first.")
+            elif st.session_state.cash < total_block_cost:
+                st.error("Insufficient cash for Institutional Block settlement.")
+            else:
+                st.session_state.cash -= total_block_cost
+                st.session_state.portfolio[selected_sym] += block_shares
+                st.session_state.trade_history.insert(
+                    0, ("BANKER BLOCK", selected_sym, block_shares, discount_price, "Institutional -1.5%")
+                )
+                st.success(f"Executed Banker Block: {block_shares} shares of {selected_sym} @ ${discount_price:,.2f}!")
+                st.rerun()
 
 st.divider()
 
-# Portfolio Holdings & Real-Time News Stream
-tab_portfolio, tab_news, tab_history = st.tabs(["💼 Portfolio Holdings", "📰 Breaking News & Macro Feed", "📜 Trade History"])
-
-with tab_portfolio:
-    portfolio_data = []
-    for sym, shares in st.session_state.portfolio.items():
-        price = st.session_state.stocks[sym]["price"]
-        market_val = shares * price
-        portfolio_data.append({
-            "Ticker": sym,
-            "Name": st.session_state.stocks[sym]["name"],
-            "Shares Owned": shares,
-            "Current Price": repr(f"${price:,.2f}").replace("'", ""),
-            "Market Value": repr(f"${market_val:,.2f}").replace("'", "")
-        })
-    st.dataframe(pd.DataFrame(portfolio_data), use_container_width=True)
+# Bottom Tabs: Unfiltered News Wire, Portfolio, and Execution Log
+tab_news, tab_port, tab_log = st.tabs(["📰 Unfiltered Market Wire", "💼 Portfolio & Margin Status", "📜 Order Execution Log"])
 
 with tab_news:
-    for headline, target, impact in st.session_state.news_log:
-        if target == "System":
-            st.info(f"**[SYSTEM]** {headline}")
-        elif target == "Macro":
-            st.warning(f"🌐 **[MACRO ECONOMIC EVENT ({impact:+.1%})]** {headline}")
-        else:
-            badge_color = "🟢" if impact > 0 else "🔴"
-            st.markdown(f"{badge_color} **[{target} | Impact: {impact:+.0%}]** {headline}")
+    st.caption("Analyze the headlines carefully—market reactions happen immediately without hints.")
+    for item in st.session_state.news_log:
+        st.markdown(f"> {item}")
 
-with tab_history:
-    if st.session_state.trade_history:
-        history_df = pd.DataFrame(st.session_state.trade_history, columns=["Action", "Ticker", "Quantity", "Execution Price"])
-        st.dataframe(history_df, use_container_width=True)
+with tab_port:
+    rows = []
+    for sym, shares in st.session_state.portfolio.items():
+        if shares != 0 or st.session_state.margin_debt[sym] > 0:
+            price = st.session_state.stocks[sym]["price"]
+            gross_val = shares * price
+            debt = st.session_state.margin_debt[sym]
+            net_equity = gross_val - debt
+            rows.append({
+                "Ticker": sym,
+                "Name": st.session_state.stocks[sym]["name"],
+                "Position": "LONG" if shares > 0 else "SHORT",
+                "Shares": round(shares, 4),
+                "Market Price": repr(f"${price:,.2f}").replace("'", ""),
+                "Gross Value": repr(f"${gross_val:,.2f}").replace("'", ""),
+                "Margin Debt": repr(f"${debt:,.2f}").replace("'", ""),
+                "Net Equity": repr(f"${net_equity:,.2f}").replace("'", ""),
+            })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
     else:
-        st.info("No trades executed yet in this session.")
+        st.info("No active positions held.")
+
+with tab_log:
+    if st.session_state.trade_history:
+        st.dataframe(
+            pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"]),
+            use_container_width=True
+        )
+    else:
+        st.info("No orders executed yet.")
+
+# Autonomous Real-Time Loop
+if live_market:
+    time.sleep(tick_speed)
+    advance_market()
+    st.rerun()
