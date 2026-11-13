@@ -7,7 +7,7 @@ import random
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & HIGH-READABILITY SLATE CHARCOAL CSS
+# 1. PAGE CONFIG & CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="HinaHinaPro Pro Terminal",
@@ -69,7 +69,6 @@ st.markdown("""
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
     .flat-color { color: #C5CEE0 !important; }
-
     .badge-up {
         background-color: rgba(255, 77, 79, 0.20);
         color: #FF4D4F;
@@ -116,7 +115,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 2. STOCK UNIVERSE & HISTORICAL GENERATOR
+# 2. STOCK CATALOG & DATA GENERATORS
 # -----------------------------------------------------------------------------
 STOCK_CATALOG = {
     "0700.HK": {"name": "Tencent Holdings", "market": "HK", "currency": "HKD", "price": 315.20, "pe": 19.8, "mkt_cap": "3.02T", "sector": "Tech & Gaming", "lot": 100, "volatility": 0.011},
@@ -179,7 +178,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. NEWS POOLS & 12-BUCKET EVENLY DISTRIBUTED SCHEDULER (0-180s)
+# 3. NEWS POOLS
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -224,51 +223,8 @@ FAKE_NEWS_POOL = [
     ("00388.HK", "HKEX proposes replacing the closing auction bell with a live karaoke performance by listed CEOs.", 0.0),
 ]
 
-def generate_stock_news_schedule():
-    """
-    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds.
-    Splits 0-180s into 12 equal 15-second buckets to ensure high even distribution 
-    without clumping, while randomizing the exact timestamp within each bucket.
-    """
-    stocks_list = list(STOCK_CATALOG.keys())
-    random.shuffle(stocks_list)
-    
-    schedule = {}
-    bucket_size = 15.0  # 180s / 12 stocks = 15s per bucket
-    
-    for i, sym in enumerate(stocks_list):
-        bucket_start = i * bucket_size
-        bucket_end = (i + 1) * bucket_size
-        # Random time within this specific 15s window
-        t = random.uniform(bucket_start + 1.0, bucket_end - 1.0)
-        
-        is_real = random.random() < 0.75
-        if is_real:
-            matching = [n for n in REAL_NEWS_POOL if n[0] == sym]
-            _, headline, impact = random.choice(matching if matching else REAL_NEWS_POOL)
-            actual_impact = impact * random.uniform(0.85, 1.25)
-        else:
-            matching = [n for n in FAKE_NEWS_POOL if n[0] == sym]
-            _, headline, _ = random.choice(matching if matching else FAKE_NEWS_POOL)
-            actual_impact = 0.0
-            is_real = False
-
-        event = {
-            "time_sec": round(t, 1),
-            "ticker": sym,
-            "headline": headline,
-            "impact": actual_impact,
-            "is_real": is_real,
-            "triggered": False
-        }
-        if sym not in schedule:
-            schedule[sym] = []
-        schedule[sym].append(event)
-        
-    return schedule
-
 # -----------------------------------------------------------------------------
-# 4. INITIALIZE SESSION STATE
+# 4. SESSION STATE INIT
 # -----------------------------------------------------------------------------
 FIXED_YT_URL = "https://youtu.be/ZRtdQ81jPUQ?si=4dcyfGLSfF2Fa-J3"
 MAX_LOAN = 1000000.0
@@ -286,7 +242,13 @@ def reset_simulation():
     st.session_state.portfolio = {sym: 0.0 for sym in STOCK_CATALOG}
     st.session_state.margin_debt = {sym: 0.0 for sym in STOCK_CATALOG}
     st.session_state.trade_history = []
-    st.session_state.news_schedule = generate_stock_news_schedule()
+    st.session_state.news_feed = []
+
+    # 新聞輪次控制
+    st.session_state.news_queue = list(STOCK_CATALOG.keys())
+    random.shuffle(st.session_state.news_queue)
+    st.session_state.next_news_time = random.uniform(15.0, 18.0)   # 第一次新聞出現時間
+    st.session_state.last_news_time = 0.0
 
     for sym, info in STOCK_CATALOG.items():
         prev_close = round(info["price"] * random.uniform(0.988, 1.012), 2)
@@ -303,58 +265,73 @@ def reset_simulation():
         st.session_state.history[sym] = df_hist
         st.session_state.intraday[sym] = generate_intraday_series(info["price"], prev_close)
 
-    st.session_state.news_feed = []
-
 if "stocks" not in st.session_state:
     reset_simulation()
 
+# -----------------------------------------------------------------------------
+# 5. MARKET ADVANCE (保留自然波動 + 新的新聞邏輯)
+# -----------------------------------------------------------------------------
 def advance_market(dt_sec=1.0):
     st.session_state.simulation_time += dt_sec
-    if st.session_state.simulation_time > 180.0:
-        st.session_state.simulation_time = 0.0
-        st.session_state.news_schedule = generate_stock_news_schedule()
-
     current_t = st.session_state.simulation_time
+
+    # 銀行利息
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003
 
-    triggered_news_batch = []
-    for sym, events in st.session_state.news_schedule.items():
-        for ev in events:
-            if not ev["triggered"] and abs(current_t - ev["time_sec"]) <= (dt_sec / 2.0 + 0.1):
-                ev["triggered"] = True
-                timestamp_str = datetime.now().strftime("%H:%M:%S")
-                news_item = {
-                    "time": timestamp_str,
-                    "ticker": ev["ticker"],
-                    "headline": ev["headline"],
-                    "impact": ev["impact"],
-                    "is_real": ev["is_real"]
-                }
-                triggered_news_batch.append(news_item)
-                st.session_state.news_feed.insert(0, news_item)
+    # ---------- 新聞邏輯（每 15~18 秒一則，每輪每支股票最多一則）----------
+    if current_t >= st.session_state.next_news_time:
+        if not st.session_state.news_queue:
+            # 這一輪結束，重新洗牌開始下一輪
+            st.session_state.news_queue = list(STOCK_CATALOG.keys())
+            random.shuffle(st.session_state.news_queue)
 
-    if len(st.session_state.news_feed) > 100:
-        st.session_state.news_feed = st.session_state.news_feed[:100]
+        sym = st.session_state.news_queue.pop(0)
 
-    tick_impacts = {sym: 0.0 for sym in STOCK_CATALOG}
-    for n in triggered_news_batch:
-        if n["is_real"]:
-            tick_impacts[n["ticker"]] += n["impact"]
+        is_real = random.random() < 0.75
+        if is_real:
+            matching = [n for n in REAL_NEWS_POOL if n[0] == sym]
+            _, headline, impact = random.choice(matching if matching else REAL_NEWS_POOL)
+            actual_impact = impact * random.uniform(0.85, 1.25)
+        else:
+            matching = [n for n in FAKE_NEWS_POOL if n[0] == sym]
+            _, headline, _ = random.choice(matching if matching else FAKE_NEWS_POOL)
+            actual_impact = 0.0
 
+        news_item = {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "ticker": sym,
+            "headline": headline,
+            "impact": actual_impact,
+            "is_real": is_real
+        }
+        st.session_state.news_feed.insert(0, news_item)
+        if len(st.session_state.news_feed) > 80:
+            st.session_state.news_feed = st.session_state.news_feed[:80]
+
+        # 設定下一次新聞時間（15~18秒後）
+        st.session_state.next_news_time = current_t + random.uniform(15.0, 18.0)
+
+        # 如果是真實新聞，立刻影響該股票價格
+        if is_real and actual_impact != 0:
+            s = st.session_state.stocks[sym]
+            s["price"] = max(0.5, round(s["price"] * (1 + actual_impact), 2))
+            s["high"] = max(s["high"], s["price"])
+            s["low"] = min(s["low"], s["price"])
+
+    # ---------- 所有股票的自然波動（保留）----------
     for sym, s in st.session_state.stocks.items():
-        drift = 0.0001 + tick_impacts[sym]
-        shock = np.random.normal(drift, s["volatility"])
+        shock = np.random.normal(0.0001, s["volatility"])
         new_price = max(0.5, round(s["price"] * (1 + shock), 2))
         s["price"] = new_price
         s["high"] = max(s["high"], new_price)
         s["low"] = min(s["low"], new_price)
 
-        vol_boost = 3.0 if tick_impacts[sym] != 0.0 else 1.0
-        added_vol = int(random.uniform(150_000, 1_200_000) * vol_boost)
+        added_vol = int(random.uniform(150_000, 1_200_000))
         s["volume"] += added_vol
         s["pred_volume"] = int(s["volume"] * random.uniform(1.04, 1.25))
 
+        # 更新 intraday
         intra = st.session_state.intraday[sym]
         new_time = (datetime.strptime(intra.iloc[-1]["Time"], "%H:%M") + timedelta(minutes=1)).strftime("%H:%M")
         new_row = pd.DataFrame([{
@@ -365,6 +342,7 @@ def advance_market(dt_sec=1.0):
         }])
         st.session_state.intraday[sym] = pd.concat([intra.iloc[1:], new_row], ignore_index=True)
 
+        # 更新日K
         hist = st.session_state.history[sym]
         hist.at[hist.index[-1], "Close"] = new_price
         hist.at[hist.index[-1], "High"] = max(hist.iloc[-1]["High"], new_price)
@@ -372,6 +350,7 @@ def advance_market(dt_sec=1.0):
         hist.at[hist.index[-1], "Volume"] = s["volume"]
         hist.at[hist.index[-1], "Predicted_Volume"] = s["pred_volume"]
 
+        # 簡易保證金強平
         shares = st.session_state.portfolio[sym]
         debt = st.session_state.margin_debt[sym]
         if shares > 0 and debt > 0:
@@ -382,14 +361,14 @@ def advance_market(dt_sec=1.0):
                 st.session_state.trade_history.insert(0, ("LIQUIDATED", sym, round(shares, 4), new_price, "Margin Call"))
 
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR CONTROLS
+# 6. SIDEBAR
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.4, max_value=3.0, value=0.8, step=0.2)
+    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
 
-    st.markdown("### 📋 Watchlist (Click to Inspect)")
+    st.markdown("### 📋 Watchlist")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
     for sym, s in st.session_state.stocks.items():
         if market_filter != "All" and s["market"] != market_filter:
@@ -404,13 +383,11 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-
     if st.button("⚡ Advance 1 Market Tick", use_container_width=True):
         advance_market(refresh_sec)
         st.rerun()
 
     st.divider()
-
     st.subheader("🏦 Commercial Bank Facility")
     remaining_credit = max(0.0, MAX_LOAN - st.session_state.bank_loan)
     st.write(f"**Bank Debt:** ${st.session_state.bank_loan:,.2f}")
@@ -469,14 +446,14 @@ with st.sidebar:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# 6. BANKRUPTCY CHECK & MAIN HEADER
+# 7. BANKRUPTCY CHECK & HEADER
 # -----------------------------------------------------------------------------
 gross_holdings = sum(st.session_state.portfolio[sym] * st.session_state.stocks[sym]["price"] for sym in STOCK_CATALOG)
 total_margin_debt = sum(st.session_state.margin_debt.values())
 net_worth = st.session_state.cash + gross_holdings - total_margin_debt - st.session_state.bank_loan
 net_pnl = net_worth - 100000.0
 
-if (st.session_state.cash <= 1.0 and net_worth <= 1.0 and remaining_credit <= 1.0) or st.session_state.bankrupt:
+if (st.session_state.cash <= 1.0 and net_worth <= 1.0) or st.session_state.bankrupt:
     st.session_state.bankrupt = True
     st.error("🚨 **YOU HAVE GONE BANKRUPT!** All assets liquidated.")
     if st.button("🔄 Restart Simulator", type="primary"):
@@ -496,7 +473,7 @@ m5.metric("🏆 True Net Worth", f"${net_worth:,.2f}", delta=f"${net_pnl:+,.2f}"
 st.divider()
 
 # -----------------------------------------------------------------------------
-# 7. SELECTED STOCK HEADER & FUNDAMENTALS
+# 8. SELECTED STOCK HEADER
 # -----------------------------------------------------------------------------
 sel = st.session_state.selected_ticker
 stock = st.session_state.stocks[sel]
@@ -506,8 +483,6 @@ is_up = chg >= 0
 main_color_cls = "up-color" if is_up else "down-color"
 badge_cls = "badge-up" if is_up else "badge-down"
 sign = "+" if is_up else ""
-
-total_turnover = stock["price"] * stock["volume"]
 
 st.markdown(f"""
 <div class="futu-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -539,19 +514,21 @@ with q3:
 with q4:
     st.markdown(f'<div class="futu-card"><div class="futu-label">Predicted Volume</div><div class="futu-val" style="color:#66B2FF;">{stock["pred_volume"]/1e6:.2f}M</div></div>', unsafe_allow_html=True)
 with q5:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Total Turnover</div><div class="futu-val">${total_turnover/1e6:.1f}M</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="futu-card"><div class="futu-label">Total Turnover</div><div class="futu-val">${(stock["price"] * stock["volume"])/1e6:.1f}M</div></div>', unsafe_allow_html=True)
 with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FLICKER-FREE FRAGMENT)
+# 9. CHARTS + ORDER BOOK (用 fragment 減少閃爍)
 # -----------------------------------------------------------------------------
 @st.fragment
-def render_trading_terminal_fragment():
+def render_charts_and_orderbook():
     col_chart, col_trade = st.columns([2.3, 1])
-
     CHART_BG = "#282E3D"
     GRID_COLOR = "#363D4F"
+    sel = st.session_state.selected_ticker
+    stock = st.session_state.stocks[sel]
+    is_up = (stock["price"] - stock["prev_close"]) >= 0
 
     with col_chart:
         chart_tab1, chart_tab2, chart_tab3 = st.tabs([
@@ -578,15 +555,9 @@ def render_trading_terminal_fragment():
             vol_colors = ["#FF4D4F" if c >= o else "#00D26A" for c, o in zip(df_hist["Close"], df_hist["Open"])]
             fig_k.add_trace(go.Bar(x=df_hist["Date"], y=df_hist["Volume"], marker_color=vol_colors, name="Volume"), row=2, col=1)
             fig_k.update_layout(
-                template="plotly_dark",
-                paper_bgcolor=CHART_BG,
-                plot_bgcolor=CHART_BG,
-                font=dict(color="#FFFFFF"),
-                height=440,
-                margin=dict(l=10, r=10, t=20, b=10),
-                xaxis_rangeslider_visible=False,
-                uirevision=f"kline_{sel}",
-                transition_duration=0
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                xaxis_rangeslider_visible=False, uirevision=f"kline_{sel}", transition_duration=0
             )
             fig_k.update_xaxes(gridcolor=GRID_COLOR)
             fig_k.update_yaxes(gridcolor=GRID_COLOR)
@@ -603,14 +574,9 @@ def render_trading_terminal_fragment():
             ))
             fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0", annotation_text="Prev Close")
             fig_intra.update_layout(
-                template="plotly_dark",
-                paper_bgcolor=CHART_BG,
-                plot_bgcolor=CHART_BG,
-                font=dict(color="#FFFFFF"),
-                height=440,
-                margin=dict(l=10, r=10, t=20, b=10),
-                uirevision=f"intra_{sel}",
-                transition_duration=0
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"intra_{sel}", transition_duration=0
             )
             fig_intra.update_xaxes(gridcolor=GRID_COLOR)
             fig_intra.update_yaxes(gridcolor=GRID_COLOR)
@@ -622,14 +588,9 @@ def render_trading_terminal_fragment():
             fig_vol.add_trace(go.Bar(x=recent_df["Date"], y=recent_df["Volume"], name="Actual Traded Volume", marker_color="#FF8533"))
             fig_vol.add_trace(go.Scatter(x=recent_df["Date"], y=recent_df["Predicted_Volume"], name="Predicted Volume", mode="lines+markers", line=dict(color="#66B2FF", width=2.5, dash="dot")))
             fig_vol.update_layout(
-                template="plotly_dark",
-                paper_bgcolor=CHART_BG,
-                plot_bgcolor=CHART_BG,
-                font=dict(color="#FFFFFF"),
-                height=440,
-                margin=dict(l=10, r=10, t=20, b=10),
-                uirevision=f"vol_{sel}",
-                transition_duration=0
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"vol_{sel}", transition_duration=0
             )
             fig_vol.update_xaxes(gridcolor=GRID_COLOR)
             fig_vol.update_yaxes(gridcolor=GRID_COLOR)
@@ -760,67 +721,62 @@ def render_trading_terminal_fragment():
                     st.success(f"Executed Banker Block for {block_shares} shares of {sel} @ ${discount_price:,.2f}!")
                     st.rerun()
 
-render_trading_terminal_fragment()
+render_charts_and_orderbook()
 
 # -----------------------------------------------------------------------------
-# 9. UNFILTERED MYSTERY NEWS WIRE & TABS
+# 10. NEWS + PORTFOLIO + LOG (也用 fragment)
 # -----------------------------------------------------------------------------
-st.divider()
-tab_news, tab_port, tab_log = st.tabs(["📰 Live Market Wire", "💼 Portfolio & Margin Status", "📜 Order Execution Log"])
+@st.fragment
+def render_bottom_tabs():
+    tab_news, tab_port, tab_log = st.tabs(["📰 Live Market Wire", "💼 Portfolio & Margin Status", "📜 Order Execution Log"])
 
-with tab_news:
-    col_nc1, col_nc2 = st.columns([3, 1])
-    with col_nc1:
+    with tab_news:
         st.caption("Evaluate every headline yourself—verify credibility and decide whether it is bullish or bearish.")
-    with col_nc2:
-        if st.button("🔄 Refresh News", use_container_width=True, key="refresh_news_btn"):
-            advance_market(refresh_sec)
-            st.rerun()
+        for item in st.session_state.news_feed[:20]:
+            st.markdown(f"""
+            <div class="news-item">
+                <span class="news-time">{item['time']} | {item['ticker']}</span>
+                <div>{item['headline']}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    for item in st.session_state.news_feed[:20]:
-        st.markdown(f"""
-        <div class="news-item">
-            <span class="news-time">{item['time']}</span>
-            <div>{item['headline']}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with tab_port:
+        rows = []
+        for sym, shares in st.session_state.portfolio.items():
+            if shares != 0 or st.session_state.margin_debt[sym] > 0:
+                price = st.session_state.stocks[sym]["price"]
+                gross_val = shares * price
+                debt = st.session_state.margin_debt[sym]
+                net_eq = gross_val - debt
+                rows.append({
+                    "Ticker": sym,
+                    "Name": st.session_state.stocks[sym]["name"],
+                    "Position": "LONG" if shares > 0 else "SHORT",
+                    "Shares": round(shares, 4),
+                    "Market Price": f"${price:,.2f}",
+                    "Gross Value": f"${gross_val:,.2f}",
+                    "Margin Debt": f"${debt:,.2f}",
+                    "Net Equity": f"${net_eq:,.2f}"
+                })
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No active positions held.")
 
-with tab_port:
-    rows = []
-    for sym, shares in st.session_state.portfolio.items():
-        if shares != 0 or st.session_state.margin_debt[sym] > 0:
-            price = st.session_state.stocks[sym]["price"]
-            gross_val = shares * price
-            debt = st.session_state.margin_debt[sym]
-            net_eq = gross_val - debt
-            rows.append({
-                "Ticker": sym,
-                "Name": st.session_state.stocks[sym]["name"],
-                "Position": "LONG" if shares > 0 else "SHORT",
-                "Shares": round(shares, 4),
-                "Market Price": f"${price:,.2f}",
-                "Gross Value": f"${gross_val:,.2f}",
-                "Margin Debt": f"${debt:,.2f}",
-                "Net Equity": f"${net_eq:,.2f}"
-            })
-    if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-    else:
-        st.info("No active positions held.")
+    with tab_log:
+        if st.session_state.trade_history:
+            st.dataframe(pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"]), use_container_width=True, hide_index=True)
+        else:
+            st.caption("No orders executed yet.")
 
-with tab_log:
-    if st.session_state.trade_history:
-        st.dataframe(pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"]), use_container_width=True, hide_index=True)
-    else:
-        st.caption("No orders executed yet.")
+render_bottom_tabs()
 
 # -----------------------------------------------------------------------------
-# 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
+# 11. AUTO STREAM (較溫和的更新，減少閃爍)
 # -----------------------------------------------------------------------------
-@st.fragment(run_every=refresh_sec)
+@st.fragment(run_every=refresh_sec if live_market else None)
 def background_stream_loop():
     if live_market and not st.session_state.bankrupt:
         advance_market(refresh_sec)
-        st.rerun()
 
 background_stream_loop()
