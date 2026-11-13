@@ -4,7 +4,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import random
-import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
@@ -180,7 +179,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. NEWS POOLS & RANDOM DISTRIBUTION SCHEDULER
+# 3. NEWS POOLS & 12-BUCKET EVENLY DISTRIBUTED SCHEDULER (0-180s)
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -226,36 +225,46 @@ FAKE_NEWS_POOL = [
 ]
 
 def generate_stock_news_schedule():
-    """Generates distributed random news appearance schedules for each stock between 0 and 180s."""
+    """
+    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds.
+    Splits 0-180s into 12 equal 15-second buckets to ensure high even distribution 
+    without clumping, while randomizing the exact timestamp within each bucket.
+    """
+    stocks_list = list(STOCK_CATALOG.keys())
+    random.shuffle(stocks_list)
+    
     schedule = {}
-    for sym in STOCK_CATALOG.keys():
-        t1 = random.uniform(5, 50)
-        t2 = random.uniform(65, 115)
-        t3 = random.uniform(130, 175)
-        times = sorted([round(t1, 1), round(t2, 1), round(t3, 1)])
+    bucket_size = 15.0  # 180s / 12 stocks = 15s per bucket
+    
+    for i, sym in enumerate(stocks_list):
+        bucket_start = i * bucket_size
+        bucket_end = (i + 1) * bucket_size
+        # Random time within this specific 15s window
+        t = random.uniform(bucket_start + 1.0, bucket_end - 1.0)
         
-        stock_events = []
-        for t in times:
-            is_real = random.random() < 0.75
-            if is_real:
-                matching = [n for n in REAL_NEWS_POOL if n[0] == sym]
-                _, headline, impact = random.choice(matching if matching else REAL_NEWS_POOL)
-                actual_impact = impact * random.uniform(0.85, 1.25)
-            else:
-                matching = [n for n in FAKE_NEWS_POOL if n[0] == sym]
-                _, headline, _ = random.choice(matching if matching else FAKE_NEWS_POOL)
-                actual_impact = 0.0
-                is_real = False
+        is_real = random.random() < 0.75
+        if is_real:
+            matching = [n for n in REAL_NEWS_POOL if n[0] == sym]
+            _, headline, impact = random.choice(matching if matching else REAL_NEWS_POOL)
+            actual_impact = impact * random.uniform(0.85, 1.25)
+        else:
+            matching = [n for n in FAKE_NEWS_POOL if n[0] == sym]
+            _, headline, _ = random.choice(matching if matching else FAKE_NEWS_POOL)
+            actual_impact = 0.0
+            is_real = False
 
-            stock_events.append({
-                "time_sec": t,
-                "ticker": sym,
-                "headline": headline,
-                "impact": actual_impact,
-                "is_real": is_real,
-                "triggered": False
-            })
-        schedule[sym] = stock_events
+        event = {
+            "time_sec": round(t, 1),
+            "ticker": sym,
+            "headline": headline,
+            "impact": actual_impact,
+            "is_real": is_real,
+            "triggered": False
+        }
+        if sym not in schedule:
+            schedule[sym] = []
+        schedule[sym].append(event)
+        
     return schedule
 
 # -----------------------------------------------------------------------------
@@ -312,7 +321,7 @@ def advance_market(dt_sec=1.0):
     triggered_news_batch = []
     for sym, events in st.session_state.news_schedule.items():
         for ev in events:
-            if not ev["triggered"] and abs(current_t - ev["time_sec"]) <= 0.6:
+            if not ev["triggered"] and abs(current_t - ev["time_sec"]) <= (dt_sec / 2.0 + 0.1):
                 ev["triggered"] = True
                 timestamp_str = datetime.now().strftime("%H:%M:%S")
                 news_item = {
@@ -325,8 +334,8 @@ def advance_market(dt_sec=1.0):
                 triggered_news_batch.append(news_item)
                 st.session_state.news_feed.insert(0, news_item)
 
-    if len(st.session_state.news_feed) > 200:
-        st.session_state.news_feed = st.session_state.news_feed[:200]
+    if len(st.session_state.news_feed) > 100:
+        st.session_state.news_feed = st.session_state.news_feed[:100]
 
     tick_impacts = {sym: 0.0 for sym in STOCK_CATALOG}
     for n in triggered_news_batch:
@@ -535,7 +544,7 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FRAGMENT TO PREVENT FLASHING)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FLICKER-FREE FRAGMENT)
 # -----------------------------------------------------------------------------
 @st.fragment
 def render_trading_terminal_fragment():
@@ -808,7 +817,10 @@ with tab_log:
 # -----------------------------------------------------------------------------
 # 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
-if live_market and not st.session_state.bankrupt:
-    time.sleep(refresh_sec)
-    advance_market(refresh_sec)
-    st.rerun()
+@st.fragment(run_every=refresh_sec)
+def background_stream_loop():
+    if live_market and not st.session_state.bankrupt:
+        advance_market(refresh_sec)
+        st.rerun()
+
+background_stream_loop()
