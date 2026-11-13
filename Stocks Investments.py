@@ -586,7 +586,7 @@ with col_chart:
         )
         fig_k.update_xaxes(gridcolor=GRID_COLOR)
         fig_k.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_k, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_k, use_container_width=True, key=f"chart_k_{sel}", config={"displayModeBar": False})
 
     with chart_tab2:
         df_intra = st.session_state.intraday[sel]
@@ -610,7 +610,7 @@ with col_chart:
         )
         fig_intra.update_xaxes(gridcolor=GRID_COLOR)
         fig_intra.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_intra, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_intra, use_container_width=True, key=f"chart_intra_{sel}", config={"displayModeBar": False})
 
     with chart_tab3:
         recent_df = df_hist.tail(25)
@@ -629,7 +629,7 @@ with col_chart:
         )
         fig_vol.update_xaxes(gridcolor=GRID_COLOR)
         fig_vol.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_vol, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_vol, use_container_width=True, key=f"chart_vol_{sel}", config={"displayModeBar": False})
 
 with col_trade:
     st.markdown("#### 📖 Level-2 Order Book")
@@ -809,7 +809,7 @@ with tab_log:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. BACKGROUND TICKER (INVISIBLE MARKET STREAMING LOOP)
+# 10. BACKGROUND TICKER (ISOLATED MARKET STREAMING LOOP)
 # -----------------------------------------------------------------------------
 @st.fragment(run_every=refresh_sec)
 def background_market_ticker():
