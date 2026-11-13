@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import random
 from datetime import datetime, timedelta
+import time
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIG & CSS
@@ -224,7 +225,7 @@ FAKE_NEWS_POOL = [
 ]
 
 # -----------------------------------------------------------------------------
-# 4. SESSION STATE
+# 4. SESSION STATE INITIALIZATION
 # -----------------------------------------------------------------------------
 FIXED_YT_URL = "https://youtu.be/ZRtdQ81jPUQ?si=4dcyfGLSfF2Fa-J3"
 MAX_LOAN = 1000000.0
@@ -244,10 +245,11 @@ def reset_simulation():
     st.session_state.trade_history = []
     st.session_state.news_feed = []
 
-    # 新聞輪次
+    # 新聞控制
     st.session_state.news_queue = list(STOCK_CATALOG.keys())
     random.shuffle(st.session_state.news_queue)
-    st.session_state.next_news_time = random.uniform(15.0, 18.0)
+    st.session_state.next_news_time = 16.0          # 第一次新聞大約 16 秒後
+    st.session_state.last_advance_time = time.time()
 
     for sym, info in STOCK_CATALOG.items():
         prev_close = round(info["price"] * random.uniform(0.988, 1.012), 2)
@@ -268,16 +270,17 @@ if "stocks" not in st.session_state:
     reset_simulation()
 
 # -----------------------------------------------------------------------------
-# 5. MARKET ADVANCE（保留自然波動 + 新聞規則）
+# 5. MARKET ADVANCE FUNCTION
 # -----------------------------------------------------------------------------
 def advance_market(dt_sec=1.0):
     st.session_state.simulation_time += dt_sec
     current_t = st.session_state.simulation_time
 
+    # 銀行利息
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003
 
-    # 新聞：每 15~18 秒一則，每輪每支股票最多一則
+    # ----- 新聞邏輯：每 15~18 秒一則，每輪每支股票最多一則 -----
     if current_t >= st.session_state.next_news_time:
         if not st.session_state.news_queue:
             st.session_state.news_queue = list(STOCK_CATALOG.keys())
@@ -306,31 +309,33 @@ def advance_market(dt_sec=1.0):
         if len(st.session_state.news_feed) > 80:
             st.session_state.news_feed = st.session_state.news_feed[:80]
 
+        # 下一次新聞時間（15~18秒後）
         st.session_state.next_news_time = current_t + random.uniform(15.0, 18.0)
 
-        # 真實新聞才影響價格
-        if is_real and actual_impact != 0:
+        # 只有真實新聞才影響股價
+        if is_real and actual_impact != 0.0:
             s = st.session_state.stocks[sym]
             s["price"] = max(0.5, round(s["price"] * (1 + actual_impact), 2))
             s["high"] = max(s["high"], s["price"])
             s["low"] = min(s["low"], s["price"])
 
-    # 所有股票自然波動（有保留）
+    # ----- 所有股票自然波動（保留）-----
     for sym, s in st.session_state.stocks.items():
-        shock = np.random.normal(0.00015, s["volatility"])
+        shock = np.random.normal(0.00012, s["volatility"])
         new_price = max(0.5, round(s["price"] * (1 + shock), 2))
         s["price"] = new_price
         s["high"] = max(s["high"], new_price)
         s["low"] = min(s["low"], new_price)
 
-        added_vol = int(random.uniform(120_000, 900_000))
+        added_vol = int(random.uniform(100_000, 800_000))
         s["volume"] += added_vol
-        s["pred_volume"] = int(s["volume"] * random.uniform(1.03, 1.22))
+        s["pred_volume"] = int(s["volume"] * random.uniform(1.03, 1.20))
 
+        # 更新 intraday
         intra = st.session_state.intraday[sym]
         try:
-            last_time = datetime.strptime(intra.iloc[-1]["Time"], "%H:%M")
-            new_time = (last_time + timedelta(minutes=1)).strftime("%H:%M")
+            last_t = datetime.strptime(str(intra.iloc[-1]["Time"]), "%H:%M")
+            new_time = (last_t + timedelta(minutes=1)).strftime("%H:%M")
         except:
             new_time = "09:30"
 
@@ -342,6 +347,7 @@ def advance_market(dt_sec=1.0):
         }])
         st.session_state.intraday[sym] = pd.concat([intra.iloc[1:], new_row], ignore_index=True)
 
+        # 更新日K
         hist = st.session_state.history[sym]
         hist.at[hist.index[-1], "Close"] = new_price
         hist.at[hist.index[-1], "High"] = max(hist.iloc[-1]["High"], new_price)
@@ -349,7 +355,7 @@ def advance_market(dt_sec=1.0):
         hist.at[hist.index[-1], "Volume"] = s["volume"]
         hist.at[hist.index[-1], "Predicted_Volume"] = s["pred_volume"]
 
-        # 保證金強平
+        # 保證金強平檢查
         shares = st.session_state.portfolio[sym]
         debt = st.session_state.margin_debt[sym]
         if shares > 0 and debt > 0:
@@ -364,15 +370,16 @@ def advance_market(dt_sec=1.0):
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.6, max_value=3.0, value=1.2, step=0.2)
+    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.8, max_value=3.0, value=1.5, step=0.1)
 
     st.markdown("### 📋 Watchlist")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
+    
     for sym, s in st.session_state.stocks.items():
         if market_filter != "All" and s["market"] != market_filter:
             continue
         chg = s["price"] - s["prev_close"]
-        chg_pct = (chg / s["prev_close"]) * 100 if s["prev_close"] != 0 else 0
+        chg_pct = (chg / s["prev_close"]) * 100 if s["prev_close"] else 0
         arrow = "▲" if chg >= 0 else "▼"
         is_selected = (sym == st.session_state.selected_ticker)
         btn_label = f"{'👉 ' if is_selected else ''}{sym} | ${s['price']:,.2f} ({arrow}{abs(chg_pct):.2f}%)"
@@ -444,7 +451,7 @@ with st.sidebar:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# 7. HEADER & BANKRUPTCY
+# 7. BANKRUPTCY CHECK + HEADER
 # -----------------------------------------------------------------------------
 gross_holdings = sum(st.session_state.portfolio[sym] * st.session_state.stocks[sym]["price"] for sym in STOCK_CATALOG)
 total_margin_debt = sum(st.session_state.margin_debt.values())
@@ -471,7 +478,7 @@ m5.metric("🏆 True Net Worth", f"${net_worth:,.2f}", delta=f"${net_pnl:+,.2f}"
 st.divider()
 
 # -----------------------------------------------------------------------------
-# 8. SELECTED STOCK INFO
+# 8. SELECTED STOCK HEADER
 # -----------------------------------------------------------------------------
 sel = st.session_state.selected_ticker
 stock = st.session_state.stocks[sel]
@@ -506,15 +513,15 @@ with q3:
 with q4:
     st.markdown(f'<div class="futu-card"><div class="futu-label">Predicted Volume</div><div class="futu-val" style="color:#66B2FF;">{stock["pred_volume"]/1e6:.2f}M</div></div>', unsafe_allow_html=True)
 with q5:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Total Turnover</div><div class="futu-val">${(stock["price"]*stock["volume"])/1e6:.1f}M</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="futu-card"><div class="futu-label">Total Turnover</div><div class="futu-val">${(stock["price"] * stock["volume"])/1e6:.1f}M</div></div>', unsafe_allow_html=True)
 with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 9. CHARTS + ORDER BOOK
+# 9. CHARTS + ORDER BOOK + EXECUTION
 # -----------------------------------------------------------------------------
 @st.fragment
-def render_charts_and_trade():
+def render_main_trading_area():
     col_chart, col_trade = st.columns([2.3, 1])
     CHART_BG = "#282E3D"
     GRID_COLOR = "#363D4F"
@@ -524,52 +531,62 @@ def render_charts_and_trade():
     main_color_cls = "up-color" if is_up else "down-color"
 
     with col_chart:
-        t1, t2, t3 = st.tabs(["🕯️ Daily K-Line & MA", "📈 Intraday", "📊 Volume"])
+        tab1, tab2, tab3 = st.tabs(["🕯️ Daily K-Line & MA", "📈 Intraday Price", "📊 Volume"])
 
         df_hist = st.session_state.history[sel].copy()
         df_hist["MA5"] = df_hist["Close"].rolling(5).mean()
         df_hist["MA10"] = df_hist["Close"].rolling(10).mean()
 
-        with t1:
+        with tab1:
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.72, 0.28])
             fig.add_trace(go.Candlestick(
-                x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"], low=df_hist["Low"], close=df_hist["Close"],
+                x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"],
+                low=df_hist["Low"], close=df_hist["Close"],
                 increasing_line_color="#FF4D4F", increasing_fillcolor="#FF4D4F",
-                decreasing_line_color="#00D26A", decreasing_fillcolor="#00D26A", name="K"
+                decreasing_line_color="#00D26A", decreasing_fillcolor="#00D26A",
+                name="K-Line"
             ), row=1, col=1)
             fig.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA5"], line=dict(color="#FFD60A", width=1.4), name="MA5"), row=1, col=1)
             fig.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA10"], line=dict(color="#5AC8FA", width=1.4), name="MA10"), row=1, col=1)
             colors = ["#FF4D4F" if c >= o else "#00D26A" for c, o in zip(df_hist["Close"], df_hist["Open"])]
-            fig.add_trace(go.Bar(x=df_hist["Date"], y=df_hist["Volume"], marker_color=colors, name="Vol"), row=2, col=1)
-            fig.update_layout(template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
-                              font=dict(color="#FFF"), height=440, margin=dict(l=10,r=10,t=20,b=10),
-                              xaxis_rangeslider_visible=False, uirevision=f"k_{sel}", transition_duration=0)
+            fig.add_trace(go.Bar(x=df_hist["Date"], y=df_hist["Volume"], marker_color=colors, name="Volume"), row=2, col=1)
+            fig.update_layout(
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                xaxis_rangeslider_visible=False, uirevision=f"kline_{sel}", transition_duration=0
+            )
             fig.update_xaxes(gridcolor=GRID_COLOR)
             fig.update_yaxes(gridcolor=GRID_COLOR)
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        with t2:
+        with tab2:
             df_intra = st.session_state.intraday[sel]
             line_col = "#FF4D4F" if is_up else "#00D26A"
             fig2 = go.Figure()
-            fig2.add_trace(go.Scatter(x=df_intra["Time"], y=df_intra["Price"], mode="lines",
-                                      line=dict(color=line_col, width=2.4), fill="tozeroy",
-                                      fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)"))
+            fig2.add_trace(go.Scatter(
+                x=df_intra["Time"], y=df_intra["Price"], mode="lines",
+                line=dict(color=line_col, width=2.4), fill="tozeroy",
+                fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)"
+            ))
             fig2.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0")
-            fig2.update_layout(template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
-                               font=dict(color="#FFF"), height=440, margin=dict(l=10,r=10,t=20,b=10),
-                               uirevision=f"i_{sel}", transition_duration=0)
+            fig2.update_layout(
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"intra_{sel}", transition_duration=0
+            )
             st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
-        with t3:
+        with tab3:
             recent = df_hist.tail(25)
             fig3 = go.Figure()
             fig3.add_trace(go.Bar(x=recent["Date"], y=recent["Volume"], name="Actual", marker_color="#FF8533"))
             fig3.add_trace(go.Scatter(x=recent["Date"], y=recent["Predicted_Volume"], name="Predicted",
                                       mode="lines+markers", line=dict(color="#66B2FF", width=2.5, dash="dot")))
-            fig3.update_layout(template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
-                               font=dict(color="#FFF"), height=440, margin=dict(l=10,r=10,t=20,b=10),
-                               uirevision=f"v_{sel}", transition_duration=0)
+            fig3.update_layout(
+                template="plotly_dark", paper_bgcolor=CHART_BG, plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"), height=440, margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"vol_{sel}", transition_duration=0
+            )
             st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
     with col_trade:
@@ -592,15 +609,19 @@ def render_charts_and_trade():
 
         st.markdown("#### 🎯 Execution Desk")
         method = st.selectbox("Trading Method", [
-            "Spot Buy (Cash)", "Spot Sell (Close Long)", "Leveraged Multiplier (Margin Loan)",
-            "Short Sell (Bearish)", "Cover Short Position", "Banker Method (Institutional Block)"
+            "Spot Buy (Cash)",
+            "Spot Sell (Close Long)",
+            "Leveraged Multiplier (Margin Loan)",
+            "Short Sell (Bearish)",
+            "Cover Short Position",
+            "Banker Method (Institutional Block)"
         ], key="trade_method_select")
 
         if method == "Leveraged Multiplier (Margin Loan)":
             margin_deposit = st.number_input("Cash Margin Deposit ($)", min_value=100.0,
                                              max_value=max(100.0, st.session_state.cash),
                                              value=min(5000.0, max(100.0, st.session_state.cash)), step=500.0)
-            multiplier = st.select_slider("Leverage", options=[2,5,10,20,50,100], value=10)
+            multiplier = st.select_slider("Leverage Multiplier", options=[2, 5, 10, 20, 50, 100], value=10)
             total_exposure = margin_deposit * multiplier
             borrowed = total_exposure - margin_deposit
             est_shares = total_exposure / stock["price"]
@@ -624,7 +645,7 @@ def render_charts_and_trade():
                     st.success(f"Bought {qty} {sel}")
                     st.rerun()
                 else:
-                    st.error("Insufficient cash")
+                    st.error("Insufficient cash!")
             elif method == "Spot Sell (Close Long)":
                 if st.session_state.portfolio[sel] >= qty:
                     proceeds = qty * stock["price"]
@@ -640,17 +661,17 @@ def render_charts_and_trade():
                     st.success(f"Sold {qty} {sel}")
                     st.rerun()
                 else:
-                    st.error("Not enough shares")
+                    st.error("Not enough shares!")
             elif method == "Leveraged Multiplier (Margin Loan)":
                 if st.session_state.cash >= margin_deposit:
                     st.session_state.cash -= margin_deposit
                     st.session_state.portfolio[sel] += est_shares
                     st.session_state.margin_debt[sel] += borrowed
-                    st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares,4), stock["price"], f"Loan ${borrowed:,.0f}"))
-                    st.success("Margin order placed")
+                    st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares, 4), stock["price"], f"Loan ${borrowed:,.0f}"))
+                    st.success("Margin order executed")
                     st.rerun()
                 else:
-                    st.error("Insufficient margin cash")
+                    st.error("Insufficient cash for margin")
             elif method == "Short Sell (Bearish)":
                 st.session_state.cash += qty * stock["price"]
                 st.session_state.portfolio[sel] -= qty
@@ -683,20 +704,22 @@ def render_charts_and_trade():
                     st.success("Block executed")
                     st.rerun()
 
-render_charts_and_trade()
+render_main_trading_area()
 
 # -----------------------------------------------------------------------------
 # 10. BOTTOM TABS
 # -----------------------------------------------------------------------------
 @st.fragment
-def render_bottom():
-    tab1, tab2, tab3 = st.tabs(["📰 Live Market Wire", "💼 Portfolio & Margin", "📜 Order Log"])
+def render_bottom_tabs():
+    tab1, tab2, tab3 = st.tabs(["📰 Live Market Wire", "💼 Portfolio & Margin Status", "📜 Order Execution Log"])
 
     with tab1:
+        st.caption("News appears every 15-18 seconds. Each stock gets at most one news per round.")
         for item in st.session_state.news_feed[:20]:
+            real_tag = "🟢 REAL" if item.get("is_real", False) else "🔴 FAKE"
             st.markdown(f"""
             <div class="news-item">
-                <span class="news-time">{item['time']} | {item['ticker']}</span>
+                <span class="news-time">{item['time']} | {item['ticker']} | {real_tag}</span>
                 <div>{item['headline']}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -712,9 +735,9 @@ def render_bottom():
                     "Position": "LONG" if shares > 0 else "SHORT",
                     "Shares": round(shares, 4),
                     "Price": f"${price:,.2f}",
-                    "Gross Value": f"${shares*price:,.2f}",
+                    "Gross Value": f"${shares * price:,.2f}",
                     "Margin Debt": f"${st.session_state.margin_debt[sym]:,.2f}",
-                    "Net Equity": f"${shares*price - st.session_state.margin_debt[sym]:,.2f}"
+                    "Net Equity": f"${shares * price - st.session_state.margin_debt[sym]:,.2f}"
                 })
         if rows:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
@@ -723,19 +746,24 @@ def render_bottom():
 
     with tab3:
         if st.session_state.trade_history:
-            st.dataframe(pd.DataFrame(st.session_state.trade_history,
-                                      columns=["Method", "Ticker", "Shares", "Price", "Notes"]),
-                         use_container_width=True, hide_index=True)
+            st.dataframe(
+                pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Price", "Notes"]),
+                use_container_width=True, hide_index=True
+            )
         else:
             st.caption("No orders yet")
 
-render_bottom()
+render_bottom_tabs()
 
 # -----------------------------------------------------------------------------
-# 11. AUTO STREAM（會自己動）
+# 11. AUTO STREAM（穩定版）
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.get("bankrupt", False):
-    import time
-    time.sleep(0.05)          # 小緩衝，減少過度刷新
-    advance_market(refresh_sec)
-    st.rerun()
+    # 使用時間差控制，避免過度刷新
+    now = time.time()
+    last = st.session_state.get("last_advance_time", 0)
+    
+    if now - last >= refresh_sec:
+        advance_market(refresh_sec)
+        st.session_state.last_advance_time = now
+        st.rerun()
