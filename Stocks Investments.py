@@ -546,9 +546,23 @@ with q6:
 # -----------------------------------------------------------------------------
 # 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FLICKER-FREE FRAGMENT)
 # -----------------------------------------------------------------------------
-@st.fragment
+@st.fragment(run_every=refresh_sec)
 def render_trading_terminal_fragment():
+    # Advance market ticks automatically inside the fragment without full-page reloads
+    if live_market and not st.session_state.bankrupt:
+        advance_market(refresh_sec)
+
     col_chart, col_trade = st.columns([2.3, 1])
+
+    CHART_BG = "#282E3D"
+    GRID_COLOR = "#363D4F"
+
+    with col_chart:
+        chart_tab1, chart_tab2, chart_tab3 = st.tabs([
+            "🕯️ Daily K-Line & MA",
+            "📈 Intraday Price vs. Time",
+            "📊 Traded vs. Predicted Volume"
+        ])
 
     CHART_BG = "#282E3D"
     GRID_COLOR = "#363D4F"
@@ -817,10 +831,3 @@ with tab_log:
 # -----------------------------------------------------------------------------
 # 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
-@st.fragment(run_every=refresh_sec)
-def background_stream_loop():
-    if live_market and not st.session_state.bankrupt:
-        advance_market(refresh_sec)
-        st.rerun()
-
-background_stream_loop()
