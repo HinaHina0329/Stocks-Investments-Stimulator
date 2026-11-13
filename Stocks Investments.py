@@ -180,7 +180,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. NEWS POOLS & 0-180s RANDOM SCHEDULE GENERATOR
+# 3. NEWS POOLS & RANDOM DISTRIBUTION SCHEDULER
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -226,35 +226,24 @@ FAKE_NEWS_POOL = [
 ]
 
 def generate_stock_news_schedule():
-    """
-    For 0 to 180s, generates a well-distributed random appearance time for each stock.
-    Ensures randomness while avoiding clumping (evenly spaces out windows).
-    """
+    """Generates distributed random news appearance schedules for each stock between 0 and 180s."""
     schedule = {}
     for sym in STOCK_CATALOG.keys():
-        # Divide 0-180s into 3 distinct 60-second windows so news is spread out evenly across time
-        t1 = random.uniform(5, 55)
+        t1 = random.uniform(5, 50)
         t2 = random.uniform(65, 115)
-        t3 = random.uniform(125, 175)
+        t3 = random.uniform(130, 175)
         times = sorted([round(t1, 1), round(t2, 1), round(t3, 1)])
         
         stock_events = []
         for t in times:
             is_real = random.random() < 0.75
             if is_real:
-                # Find matching real news or fallback to random real
                 matching = [n for n in REAL_NEWS_POOL if n[0] == sym]
-                if matching:
-                    _, headline, impact = random.choice(matching)
-                else:
-                    _, headline, impact = random.choice(REAL_NEWS_POOL)
+                _, headline, impact = random.choice(matching if matching else REAL_NEWS_POOL)
                 actual_impact = impact * random.uniform(0.85, 1.25)
             else:
                 matching = [n for n in FAKE_NEWS_POOL if n[0] == sym]
-                if matching:
-                    _, headline, _ = random.choice(matching)
-                else:
-                    _, headline, _ = random.choice(FAKE_NEWS_POOL)
+                _, headline, _ = random.choice(matching if matching else FAKE_NEWS_POOL)
                 actual_impact = 0.0
                 is_real = False
 
@@ -281,7 +270,7 @@ def reset_simulation():
     st.session_state.bankrupt = False
     st.session_state.confirm_bankruptcy = False
     st.session_state.selected_ticker = "NVDA"
-    st.session_state.simulation_time = 0.0  # Tracks elapsed seconds from 0 to 180s
+    st.session_state.simulation_time = 0.0
     st.session_state.stocks = {}
     st.session_state.history = {}
     st.session_state.intraday = {}
@@ -313,14 +302,13 @@ if "stocks" not in st.session_state:
 def advance_market(dt_sec=1.0):
     st.session_state.simulation_time += dt_sec
     if st.session_state.simulation_time > 180.0:
-        st.session_state.simulation_time = 0.0  # Loop session or reset schedule
+        st.session_state.simulation_time = 0.0
         st.session_state.news_schedule = generate_stock_news_schedule()
 
     current_t = st.session_state.simulation_time
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003
 
-    # Check scheduled news for all stocks at this timestamp
     triggered_news_batch = []
     for sym, events in st.session_state.news_schedule.items():
         for ev in events:
@@ -340,7 +328,6 @@ def advance_market(dt_sec=1.0):
     if len(st.session_state.news_feed) > 200:
         st.session_state.news_feed = st.session_state.news_feed[:200]
 
-    # Map active impacts per ticker for this tick
     tick_impacts = {sym: 0.0 for sym in STOCK_CATALOG}
     for n in triggered_news_batch:
         if n["is_real"]:
@@ -392,7 +379,6 @@ with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
     refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.4, max_value=3.0, value=0.8, step=0.2)
-    st.caption(f"Session Clock: {st.session_state.simulation_time:.1f}s / 180s")
 
     st.markdown("### 📋 Watchlist (Click to Inspect)")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
@@ -549,7 +535,7 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN FRAGMENT TO PREVENT FLASHING)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FRAGMENT TO PREVENT FLASHING)
 # -----------------------------------------------------------------------------
 @st.fragment
 def render_trading_terminal_fragment():
@@ -820,7 +806,7 @@ with tab_log:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. NON-FLASHING AUTO-STREAM LOOP
+# 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.bankrupt:
     time.sleep(refresh_sec)
