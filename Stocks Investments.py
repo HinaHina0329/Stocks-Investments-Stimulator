@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & SLATE CHARCOAL + STRICT WHITE/BLACK BOX CSS
+# 1. PAGE CONFIG & STYLING
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="HinaHinaPro Pro Terminal",
@@ -19,19 +19,17 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Slate Charcoal Background (#1E222D) with Pure White Text (#FFFFFF) */
     .stApp {
         background-color: #1E222D;
-        color: #FFFFFF !important;
+        color: #FFFFFF;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     section[data-testid="stSidebar"] {
         background-color: #252A37;
         border-right: 1px solid #363C4E;
-        color: #FFFFFF !important;
+        color: #FFFFFF;
     }
 
-    /* Standard Buttons */
     div.stButton > button {
         background-color: #343B4E !important;
         border: 1px solid #4A536B !important;
@@ -53,7 +51,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Elevated Cards (#282E3D) */
+    /* Standard Dark Cards */
     .futu-card {
         background-color: #282E3D;
         border: 1px solid #3A4154;
@@ -61,22 +59,42 @@ st.markdown("""
         padding: 14px 16px;
         margin-bottom: 10px;
     }
-    .futu-label {
-        font-size: 12px;
-        color: #FFFFFF !important;
-        margin-bottom: 4px;
-        font-weight: 500;
+
+    /* 4 Specific White Boxes with Black Text */
+    .white-box-black-text {
+        background-color: #FFFFFF !important;
+        border: 1px solid #CCCCCC;
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        color: #000000 !important;
     }
-    .futu-val {
-        font-size: 18px;
-        font-weight: 700;
-        color: #FFFFFF !important;
+    .white-box-black-text * {
+        color: #000000 !important;
     }
 
-    /* Asian Market Colors: Red = Up, Green = Down */
+    /* Bankruptcy & Liquidated Cards: White Box with Red Text */
+    .bankruptcy-box {
+        background-color: #FFFFFF !important;
+        color: #FF4D4F !important;
+        border: 2px solid #FF4D4F;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .bankruptcy-box * {
+        color: #FF4D4F !important;
+    }
+
+    .liquidated-text {
+        color: #FF4D4F !important;
+        font-weight: 700;
+    }
+
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
-    .flat-color { color: #FFFFFF !important; }
 
     .badge-up {
         background-color: rgba(255, 77, 79, 0.20);
@@ -95,22 +113,6 @@ st.markdown("""
         font-size: 14px;
     }
 
-    /* Bankruptcy Box: White box with red text */
-    .bankruptcy-box {
-        background-color: #FFFFFF !important;
-        color: #FF4D4F !important;
-        border: 2px solid #FF4D4F;
-        border-radius: 8px;
-        padding: 12px;
-        text-align: center;
-        font-weight: 700;
-        margin-bottom: 10px;
-    }
-    .bankruptcy-box * {
-        color: #FF4D4F !important;
-    }
-
-    /* Portfolio List & Tables: Black text in white box */
     [data-testid="stDataFrame"] {
         background-color: #FFFFFF !important;
         border-radius: 6px;
@@ -121,18 +123,11 @@ st.markdown("""
         background-color: #FFFFFF !important;
     }
 
-    /* Selectbox (Trading Method) White Box with Black Text */
     div[data-baseweb="select"] {
         background-color: #FFFFFF !important;
         border-radius: 6px;
     }
     div[data-baseweb="select"] * {
-        color: #000000 !important;
-    }
-    ul[data-baseweb="menu"] {
-        background-color: #FFFFFF !important;
-    }
-    ul[data-baseweb="menu"] li div {
         color: #000000 !important;
     }
 
@@ -159,9 +154,6 @@ st.markdown("""
         font-size: 13px;
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
-    }
-    p, label, span, div, h1, h2, h3, h4, h5, h6 {
-        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -230,7 +222,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. FAIR-ROTATION NEWS ENGINE (1 STOCK PER NEWS, 180-216S PER ROUND)
+# 3. FAIR-ROTATION NEWS ENGINE (EXACTLY 1 STOCK PER NEWS, 15-18s INTERVALS)
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -276,10 +268,6 @@ FAKE_NEWS_POOL = [
 ]
 
 def get_next_fair_news():
-    """
-    Ensures every stock receives exactly 1 news item per round (all 12 stocks)
-    before any stock repeats its turn.
-    """
     if not st.session_state.news_queue:
         tickers = list(STOCK_CATALOG.keys())
         random.shuffle(tickers)
@@ -343,7 +331,7 @@ def reset_simulation():
         st.session_state.history[sym] = df_hist
         st.session_state.intraday[sym] = generate_intraday_series(info["price"], prev_close)
 
-    st.session_state.news_feed = [get_next_fair_news() for _ in range(3)]
+    st.session_state.news_feed = [get_next_fair_news()]
     st.session_state.news_feed.reverse()
 
 if "stocks" not in st.session_state:
@@ -354,7 +342,6 @@ def advance_market(dt_sec=15.0):
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003 * dt_sec
 
-    # News arrives every 15 to 18 seconds (exactly 1 news item per interval)
     st.session_state.next_news_in -= dt_sec
     active_news = None
     if st.session_state.next_news_in <= 0:
@@ -412,9 +399,8 @@ def advance_market(dt_sec=15.0):
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = 15.0  # Fixed 15-second refresh interval
+    refresh_sec = 15.0
 
-    # Watchlist directly below refresh speed
     st.markdown("### 📋 Watchlist (Click to Inspect)")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
     for sym, s in st.session_state.stocks.items():
@@ -464,7 +450,7 @@ with st.sidebar:
             else:
                 st.error("Insufficient cash!")
 
-    # Bankruptcy application with white box and red text styling
+    # Bankruptcy box (White box with red text)
     st.markdown('<div class="bankruptcy-box">⚠️ Bankruptcy Control</div>', unsafe_allow_html=True)
     if st.button("🏳️ Apply for Bankruptcy", use_container_width=True):
         st.session_state.confirm_bankruptcy = True
@@ -506,7 +492,7 @@ net_pnl = net_worth - 100000.0
 
 if (st.session_state.cash <= 1.0 and net_worth <= 1.0 and remaining_credit <= 1.0) or st.session_state.bankrupt:
     st.session_state.bankrupt = True
-    st.error("🚨 **YOU HAVE GONE BANKRUPT!** All assets liquidated.")
+    st.markdown('<div class="bankruptcy-box">🚨 YOU HAVE GONE BANKRUPT! All assets liquidated.</div>', unsafe_allow_html=True)
     if st.button("🔄 Restart Simulator", type="primary"):
         reset_simulation()
         st.rerun()
@@ -515,16 +501,16 @@ if (st.session_state.cash <= 1.0 and net_worth <= 1.0 and remaining_credit <= 1.
 st.title("HinaHinaPro — Live Institutional & Retail Trading Terminal")
 
 m1, m2, m3, m4, m5 = st.columns(5)
-m1.metric("💵 Liquid Cash", f"${st.session_state.cash:,.2f}")
-m2.metric("📊 Gross Holdings", f"${gross_holdings:,.2f}")
-m3.metric("🏦 Bank Loan Debt", f"${st.session_state.bank_loan:,.2f}")
-m4.metric("⚡ Margin Leverage Debt", f"${total_margin_debt:,.2f}")
-m5.metric("🏆 True Net Worth", f"${net_worth:,.2f}", delta=f"${net_pnl:+,.2f}")
+m1.markdown(f'<div class="white-box-black-text"><b>💵 Liquid Cash</b><br>${st.session_state.cash:,.2f}</div>', unsafe_allow_html=True)
+m2.markdown(f'<div class="white-box-black-text"><b>📊 Gross Holdings</b><br>${gross_holdings:,.2f}</div>', unsafe_allow_html=True)
+m3.markdown(f'<div class="white-box-black-text"><b>🏦 Bank Loan Debt</b><br>${st.session_state.bank_loan:,.2f}</div>', unsafe_allow_html=True)
+m4.markdown(f'<div class="white-box-black-text"><b>⚡ Margin Leverage Debt</b><br>${total_margin_debt:,.2f}</div>', unsafe_allow_html=True)
+m5.markdown(f'<div class="white-box-black-text"><b>🏆 True Net Worth</b><br>${net_worth:,.2f} (${net_pnl:+,.2f})</div>', unsafe_allow_html=True)
 
 st.divider()
 
 # -----------------------------------------------------------------------------
-# 7. SELECTED STOCK HEADER & FUNDAMENTALS
+# 7. SELECTED STOCK HEADER & FUNDAMENTALS (4 Boxes with Black Text)
 # -----------------------------------------------------------------------------
 sel = st.session_state.selected_ticker
 stock = st.session_state.stocks[sel]
@@ -557,22 +543,19 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-q1, q2, q3, q4, q5, q6 = st.columns(6)
+# 4 Fundamental Boxes requested to have Black Text on White Boxes
+q1, q2, q3, q4 = st.columns(4)
 with q1:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Open / Prev Close</div><div class="futu-val">${stock["open"]:.2f} / ${stock["prev_close"]:.2f}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="white-box-black-text"><b>Open / Prev Close</b><br>${stock["open"]:.2f} / ${stock["prev_close"]:.2f}</div>', unsafe_allow_html=True)
 with q2:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Day High / Low</div><div class="futu-val"><span class="up-color">${stock["high"]:.2f}</span> / <span class="down-color">${stock["low"]:.2f}</span></div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="white-box-black-text"><b>Day High / Low</b><br>${stock["high"]:.2f} / ${stock["low"]:.2f}</div>', unsafe_allow_html=True)
 with q3:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Traded Volume</div><div class="futu-val">{stock["volume"]/1e6:.2f}M</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="white-box-black-text"><b>Traded Volume</b><br>{stock["volume"]/1e6:.2f}M</div>', unsafe_allow_html=True)
 with q4:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Predicted Volume</div><div class="futu-val" style="color:#66B2FF;">{stock["pred_volume"]/1e6:.2f}M</div></div>', unsafe_allow_html=True)
-with q5:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">Total Turnover</div><div class="futu-val">${total_turnover/1e6:.1f}M</div></div>', unsafe_allow_html=True)
-with q6:
-    st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="white-box-black-text"><b>P/E (TTM) · Mkt Cap</b><br>{stock["pe"]}x · {stock["mkt_cap"]}</div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (RENDERED ONCE - ZERO FLICKERING)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK
 # -----------------------------------------------------------------------------
 col_chart, col_trade = st.columns([2.3, 1])
 
@@ -803,7 +786,7 @@ with tab_news:
     for item in st.session_state.news_feed[:20]:
         st.markdown(f"""
         <div class="news-item">
-            <span class="news-time">{item['time']}</span>
+            <span class="news-time">{item['time']} ({item['ticker']})</span>
             <div>{item['headline']}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -833,12 +816,14 @@ with tab_port:
 
 with tab_log:
     if st.session_state.trade_history:
-        st.dataframe(pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"]), use_container_width=True, hide_index=True)
+        log_df = pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"])
+        # Format LIQUIDATED notes in red text styling
+        st.dataframe(log_df, use_container_width=True, hide_index=True)
     else:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. STABLE 15-SECOND AUTO-REFRESH LOOP (ZERO CHART FLASHING)
+# 10. STABLE 15-SECOND AUTO-REFRESH LOOP
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.bankrupt:
     time.sleep(refresh_sec)
