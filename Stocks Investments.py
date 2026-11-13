@@ -29,6 +29,41 @@ st.markdown("""
         background-color: #252A37;
         border-right: 1px solid #363C4E;
     }
+
+    /* ALL WHITE / SECONDARY BUTTONS: RED TEXT FOR HIGH READABILITY */
+    div.stButton > button[kind="secondary"],
+    div.stButton > button:not([kind="primary"]) {
+        background-color: #F4F6FA !important;
+        border: 1px solid #D0D7DE !important;
+        color: #D9232E !important;
+        font-weight: 700 !important;
+    }
+    div.stButton > button[kind="secondary"] p,
+    div.stButton > button[kind="secondary"] span,
+    div.stButton > button:not([kind="primary"]) p,
+    div.stButton > button:not([kind="primary"]) span {
+        color: #D9232E !important;
+        font-weight: 700 !important;
+    }
+    div.stButton > button[kind="secondary"]:hover,
+    div.stButton > button:not([kind="primary"]):hover {
+        background-color: #FFEBEB !important;
+        border-color: #D9232E !important;
+        color: #B8141E !important;
+    }
+
+    /* Primary Action Button (Execute Order) */
+    div.stButton > button[kind="primary"] {
+        background-color: #FF4D4F !important;
+        border: none !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+    }
+    div.stButton > button[kind="primary"] p,
+    div.stButton > button[kind="primary"] span {
+        color: #FFFFFF !important;
+    }
+
     /* Elevated Cards in Soft Charcoal (#282E3D) */
     .futu-card {
         background-color: #282E3D;
@@ -94,10 +129,6 @@ st.markdown("""
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
     }
-    /* Make Streamlit text and labels crisp and readable */
-    p, label, span, div {
-        color: #F0F3FA;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,18 +136,18 @@ st.markdown("""
 # 2. STOCK UNIVERSE & HISTORICAL GENERATOR
 # -----------------------------------------------------------------------------
 STOCK_CATALOG = {
-    "0700.HK": {"name": "Tencent Holdings", "market": "HK", "currency": "HKD", "price": 315.20, "pe": 19.8, "mkt_cap": "3.02T", "sector": "Tech & Gaming", "lot": 100, "volatility": 0.006},
-    "9988.HK": {"name": "Alibaba Group", "market": "HK", "currency": "HKD", "price": 74.50, "pe": 16.4, "mkt_cap": "1.45T", "sector": "E-Commerce & AI", "lot": 100, "volatility": 0.008},
-    "01810.HK": {"name": "Xiaomi Corp.", "market": "HK", "currency": "HKD", "price": 29.85, "pe": 31.2, "mkt_cap": "745B", "sector": "Consumer Tech & EV", "lot": 200, "volatility": 0.009},
-    "00005.HK": {"name": "HSBC Holdings", "market": "HK", "currency": "HKD", "price": 71.20, "pe": 8.1, "mkt_cap": "1.29T", "sector": "Banking", "lot": 400, "volatility": 0.004},
-    "00388.HK": {"name": "HKEX", "market": "HK", "currency": "HKD", "price": 312.40, "pe": 30.5, "mkt_cap": "396B", "sector": "Financials", "lot": 100, "volatility": 0.006},
-    "NVDA":    {"name": "NVIDIA Corporation", "market": "US", "currency": "USD", "price": 880.00, "pe": 44.2, "mkt_cap": "2.18T", "sector": "Semiconductors", "lot": 1, "volatility": 0.011},
-    "MSFT":    {"name": "Microsoft Corporation", "market": "US", "currency": "USD", "price": 420.00, "pe": 35.1, "mkt_cap": "3.12T", "sector": "Cloud & AI", "lot": 1, "volatility": 0.006},
-    "AAPL":    {"name": "Apple Inc.", "market": "US", "currency": "USD", "price": 182.50, "pe": 32.4, "mkt_cap": "2.81T", "sector": "Consumer Tech", "lot": 1, "volatility": 0.006},
-    "TSLA":    {"name": "Tesla Inc.", "market": "US", "currency": "USD", "price": 235.00, "pe": 78.5, "mkt_cap": "750B", "sector": "EV & Robotics", "lot": 1, "volatility": 0.013},
-    "GOOG":    {"name": "Alphabet Inc.", "market": "US", "currency": "USD", "price": 175.00, "pe": 26.2, "mkt_cap": "2.15T", "sector": "Search & AI", "lot": 1, "volatility": 0.007},
-    "TSM":     {"name": "TSMC (ADR)", "market": "US", "currency": "USD", "price": 198.40, "pe": 29.6, "mkt_cap": "1.03T", "sector": "Semiconductors", "lot": 1, "volatility": 0.009},
-    "BTC":     {"name": "Bitcoin Index", "market": "Crypto", "currency": "USD", "price": 64200.0, "pe": 0.0, "mkt_cap": "1.26T", "sector": "Digital Asset", "lot": 1, "volatility": 0.015},
+    "0700.HK": {"name": "Tencent Holdings", "market": "HK", "currency": "HKD", "price": 315.20, "pe": 19.8, "mkt_cap": "3.02T", "sector": "Tech & Gaming", "lot": 100, "volatility": 0.011},
+    "9988.HK": {"name": "Alibaba Group", "market": "HK", "currency": "HKD", "price": 74.50, "pe": 16.4, "mkt_cap": "1.45T", "sector": "E-Commerce & AI", "lot": 100, "volatility": 0.013},
+    "01810.HK": {"name": "Xiaomi Corp.", "market": "HK", "currency": "HKD", "price": 29.85, "pe": 31.2, "mkt_cap": "745B", "sector": "Consumer Tech & EV", "lot": 200, "volatility": 0.014},
+    "00005.HK": {"name": "HSBC Holdings", "market": "HK", "currency": "HKD", "price": 71.20, "pe": 8.1, "mkt_cap": "1.29T", "sector": "Banking", "lot": 400, "volatility": 0.008},
+    "00388.HK": {"name": "HKEX", "market": "HK", "currency": "HKD", "price": 312.40, "pe": 30.5, "mkt_cap": "396B", "sector": "Financials", "lot": 100, "volatility": 0.010},
+    "NVDA":    {"name": "NVIDIA Corporation", "market": "US", "currency": "USD", "price": 880.00, "pe": 44.2, "mkt_cap": "2.18T", "sector": "Semiconductors", "lot": 1, "volatility": 0.018},
+    "MSFT":    {"name": "Microsoft Corporation", "market": "US", "currency": "USD", "price": 420.00, "pe": 35.1, "mkt_cap": "3.12T", "sector": "Cloud & AI", "lot": 1, "volatility": 0.010},
+    "AAPL":    {"name": "Apple Inc.", "market": "US", "currency": "USD", "price": 182.50, "pe": 32.4, "mkt_cap": "2.81T", "sector": "Consumer Tech", "lot": 1, "volatility": 0.011},
+    "TSLA":    {"name": "Tesla Inc.", "market": "US", "currency": "USD", "price": 235.00, "pe": 78.5, "mkt_cap": "750B", "sector": "EV & Robotics", "lot": 1, "volatility": 0.020},
+    "GOOG":    {"name": "Alphabet Inc.", "market": "US", "currency": "USD", "price": 175.00, "pe": 26.2, "mkt_cap": "2.15T", "sector": "Search & AI", "lot": 1, "volatility": 0.012},
+    "TSM":     {"name": "TSMC (ADR)", "market": "US", "currency": "USD", "price": 198.40, "pe": 29.6, "mkt_cap": "1.03T", "sector": "Semiconductors", "lot": 1, "volatility": 0.014},
+    "BTC":     {"name": "Bitcoin Index", "market": "Crypto", "currency": "USD", "price": 64200.0, "pe": 0.0, "mkt_cap": "1.26T", "sector": "Digital Asset", "lot": 1, "volatility": 0.024},
 }
 
 def generate_initial_history(base_price, periods=60):
@@ -171,32 +202,42 @@ def generate_intraday_series(current_price, prev_close):
 #    - ONLY REAL NEWS affects stock prices; FAKE NEWS has 0.0 price impact!
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
-    ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.048),
-    ("NVDA", "Next-generation AI data center cluster orders exceed annual wafer and packaging capacity forecasts.", 0.052),
-    ("NVDA", "Export licensing reviews tightened on high-bandwidth memory and flagship compute accelerators.", -0.042),
-    ("MSFT", "Enterprise cloud software spending accelerates as Fortune 500 firms migrate core workloads to Azure.", 0.038),
-    ("0700.HK", "Monthly mobile gaming approvals expand alongside double-digit video account advertising growth.", 0.045),
-    ("0700.HK", "Major institutional shareholder discloses routine block reduction via Hong Kong clearing house.", -0.032),
-    ("9988.HK", "Alibaba explores Hong Kong listing spin-off for its custom AI semiconductor design unit.", 0.041),
-    ("9988.HK", "Cross-border e-commerce platforms face heightened regulatory compliance audits across key hubs.", -0.039),
-    ("01810.HK", "Smart EV delivery backlog stretches past 24 weeks as second-phase Beijing factory ramps output.", 0.046),
-    ("00388.HK", "HKEX reports record average daily ETP turnover as southbound Stock Connect inflows surge.", 0.034),
-    ("00005.HK", "HKMA maintains steady liquidity operations as cross-boundary wealth management connect expands.", 0.022),
-    ("AAPL", "Flagship smartphone pre-orders beat supply chain estimates across East Asia and Europe.", 0.036),
-    ("TSLA", "Safety regulators open formal inquiry into full self-driving fleet telemetry logs.", -0.055),
-    ("TSLA", "Lithium refining capacity expands rapidly, lowering battery pack unit manufacturing costs.", 0.044),
-    ("GOOG", "Multimodal search architecture rollout drives higher commercial ad click-through conversion.", 0.039),
-    ("TSM", "Foundry monthly revenue climbs 4.8% YoY on sustained 3nm and 2nm node utilization.", 0.042),
-    ("BTC", "Sovereign wealth fund filings reveal fresh institutional allocations into spot digital asset ETFs.", 0.058),
+    ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
+    ("NVDA", "Next-generation AI data center cluster orders exceed annual wafer and packaging capacity forecasts.", 0.060),
+    ("NVDA", "Export licensing reviews tightened on high-bandwidth memory and flagship compute accelerators.", -0.048),
+    ("MSFT", "Enterprise cloud software spending accelerates as Fortune 500 firms migrate core workloads to Azure.", 0.042),
+    ("MSFT", "Global enterprise software licensing renewal cycle slows down amid IT budget scrutiny.", -0.035),
+    ("0700.HK", "Monthly mobile gaming approvals expand alongside double-digit video account advertising growth.", 0.050),
+    ("0700.HK", "Major institutional shareholder discloses routine block reduction via Hong Kong clearing house.", -0.038),
+    ("9988.HK", "Alibaba explores Hong Kong listing spin-off for its custom AI semiconductor design unit.", 0.046),
+    ("9988.HK", "Cross-border e-commerce platforms face heightened regulatory compliance audits across key hubs.", -0.044),
+    ("01810.HK", "Smart EV delivery backlog stretches past 24 weeks as second-phase Beijing factory ramps output.", 0.052),
+    ("01810.HK", "Smartphone component cost inflation pressures quarterly hardware gross margin guidance.", -0.036),
+    ("00388.HK", "HKEX reports record average daily ETP turnover as southbound Stock Connect inflows surge.", 0.040),
+    ("00388.HK", "Secondary listing pipeline faces temporary procedural delays amid global rate volatility.", -0.030),
+    ("00005.HK", "HKMA maintains steady liquidity operations as cross-boundary wealth management connect expands.", 0.028),
+    ("00005.HK", "Net interest margin compression weighs on regional commercial lending revenue forecasts.", -0.026),
+    ("AAPL", "Flagship smartphone pre-orders beat supply chain estimates across East Asia and Europe.", 0.042),
+    ("AAPL", "European competition regulators open fresh review into App Store developer fee structures.", -0.038),
+    ("TSLA", "Safety regulators open formal inquiry into full self-driving fleet telemetry logs.", -0.062),
+    ("TSLA", "Lithium refining capacity expands rapidly, lowering battery pack unit manufacturing costs.", 0.050),
+    ("GOOG", "Multimodal search architecture rollout drives higher commercial ad click-through conversion.", 0.044),
+    ("GOOG", "Antitrust remedies proposal targets default mobile browser search distribution agreements.", -0.045),
+    ("TSM", "Foundry monthly revenue climbs 4.8% YoY on sustained 3nm and 2nm node utilization.", 0.048),
+    ("TSM", "Overseas fab construction schedule faces skilled labor bottlenecks and higher capex.", -0.035),
+    ("BTC", "Sovereign wealth fund filings reveal fresh institutional allocations into spot digital asset ETFs.", 0.065),
+    ("BTC", "Major derivatives exchange reports sudden cascade of leveraged long liquidations.", -0.058),
 ]
 
 REAL_DYNAMIC_TEMPLATES = [
-    ("0700.HK", "Southbound Stock Connect records over HK$8.2B net inflow into major Hong Kong internet heavyweights.", 0.028),
-    ("00388.HK", "Two Mainland technology listings debut on HKEX Main Board with oversubscribed institutional tranches.", 0.025),
-    ("TSM", "Global cloud hyperscalers raise annual capital expenditure guidance for custom silicon foundries.", 0.031),
-    ("00005.HK", "Corporate trade-finance volumes across Greater Bay Area commercial banking desks edge higher.", 0.018),
-    ("AAPL", "Component suppliers in Shenzhen and Taipei report steady Q4 order book visibility.", 0.022),
-    ("9988.HK", "Cloud intelligence division announces fresh price adjustments across core enterprise AI APIs.", 0.024),
+    ("0700.HK", "Southbound Stock Connect records over HK$8.2B net inflow into major Hong Kong internet heavyweights.", 0.034),
+    ("00388.HK", "Two Mainland technology listings debut on HKEX Main Board with oversubscribed institutional tranches.", 0.030),
+    ("TSM", "Global cloud hyperscalers raise annual capital expenditure guidance for custom silicon foundries.", 0.038),
+    ("00005.HK", "Corporate trade-finance volumes across Greater Bay Area commercial banking desks edge higher.", 0.024),
+    ("AAPL", "Component suppliers in Shenzhen and Taipei report steady Q4 order book visibility.", 0.028),
+    ("9988.HK", "Cloud intelligence division announces fresh price adjustments across core enterprise AI APIs.", 0.030),
+    ("NVDA", "Hyperscale data center operators accelerate liquid-cooled server rack deployments.", 0.035),
+    ("TSLA", "Megapack utility-scale energy storage shipments hit a new quarterly installation record.", 0.036),
 ]
 
 FAKE_NEWS_POOL = [
@@ -211,19 +252,21 @@ FAKE_NEWS_POOL = [
     ("00005.HK", "HSBC applies for a banking license to open the first zero-gravity mortgage branch on the Moon.", 0.0),
     ("GOOG", "Alphabet announces Google Search will return answers exclusively in medieval haiku format next month.", 0.0),
     ("BTC", "Anonymous miners claim to have discovered the final Bitcoin hidden inside a vintage floppy disk.", 0.0),
+    ("TSM", "TSMC engineers announce breakthrough 0.001nm chips carved using microscopic origami techniques.", 0.0),
+    ("00388.HK", "HKEX proposes replacing the closing auction bell with a live karaoke performance by listed CEOs.", 0.0),
 ]
 
 def generate_news_event(tick_count):
     """Generates infinite news: ~75% real (moves price), ~25% fake (zero price effect). No hints shown."""
     is_real = random.random() < 0.75
-    timestamp = (datetime.now() + timedelta(minutes=tick_count)).strftime("%H:%M:%S")
+    timestamp = datetime.now().strftime("%H:%M:%S")
 
     if is_real:
         if random.random() < 0.70:
             ticker, headline, base_impact = random.choice(REAL_NEWS_POOL)
         else:
             ticker, headline, base_impact = random.choice(REAL_DYNAMIC_TEMPLATES)
-        actual_impact = base_impact * random.uniform(0.80, 1.20)
+        actual_impact = base_impact * random.uniform(0.85, 1.25)
     else:
         ticker, headline, _ = random.choice(FAKE_NEWS_POOL)
         actual_impact = 0.0  # Fake news NEVER affects the stock price
@@ -271,7 +314,7 @@ def reset_simulation():
         st.session_state.history[sym] = df_hist
         st.session_state.intraday[sym] = generate_intraday_series(info["price"], prev_close)
 
-    st.session_state.news_feed = [generate_news_event(i) for i in range(10)]
+    st.session_state.news_feed = [generate_news_event(i) for i in range(12)]
     st.session_state.news_feed.reverse()
 
 if "stocks" not in st.session_state:
@@ -281,30 +324,30 @@ def advance_market(n_ticks=1):
     for _ in range(n_ticks):
         st.session_state.tick_count += 1
         if st.session_state.bank_loan > 0:
-            st.session_state.bank_loan += st.session_state.bank_loan * 0.00002
+            st.session_state.bank_loan += st.session_state.bank_loan * 0.00003
 
-        # Generate news every 2 ticks so the wire updates steadily without overwhelming the screen
+        # Generate breaking news frequently (85% chance per tick)
         active_news = None
-        if st.session_state.tick_count % 2 == 0:
+        if random.random() < 0.85:
             active_news = generate_news_event(st.session_state.tick_count)
             st.session_state.news_feed.insert(0, active_news)
-            if len(st.session_state.news_feed) > 120:
+            if len(st.session_state.news_feed) > 150:
                 st.session_state.news_feed.pop()
 
         for sym, s in st.session_state.stocks.items():
-            drift = 0.00003
+            drift = 0.0001
             # ONLY REAL NEWS moves the price (fake news has impact == 0.0)
             if active_news and active_news["is_real"] and sym == active_news["ticker"]:
                 drift += active_news["impact"]
 
-            shock = np.random.normal(drift, s["volatility"] * 0.65)
+            shock = np.random.normal(drift, s["volatility"])
             new_price = max(0.5, round(s["price"] * (1 + shock), 2))
             s["price"] = new_price
             s["high"] = max(s["high"], new_price)
             s["low"] = min(s["low"], new_price)
 
-            vol_boost = 2.0 if (active_news and active_news["is_real"] and sym == active_news["ticker"]) else 1.0
-            added_vol = int(random.uniform(100_000, 900_000) * vol_boost)
+            vol_boost = 2.4 if (active_news and active_news["is_real"] and sym == active_news["ticker"]) else 1.0
+            added_vol = int(random.uniform(150_000, 1_200_000) * vol_boost)
             s["volume"] += added_vol
             s["pred_volume"] = int(s["volume"] * random.uniform(1.04, 1.25))
 
@@ -338,13 +381,31 @@ def advance_market(n_ticks=1):
                     st.session_state.trade_history.insert(0, ("LIQUIDATED", sym, round(shares, 4), new_price, "Margin Call"))
 
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR: WATCHLIST, BANK FACILITY & MUSIC PLAYER
+# 5. SIDEBAR: CONTROLS -> WATCHLIST DIRECTLY BELOW REFRESH SPEED -> FACILITIES
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
-    live_market = st.toggle("🟢 Auto-Stream Market (Smooth)", value=False)
-    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
+    live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
+    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.4, max_value=3.0, value=0.8, step=0.2)
 
+    # WATCHLIST PLACED DIRECTLY BELOW REFRESH SPEED
+    st.markdown("### 📋 Watchlist (Click to Inspect)")
+    market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
+    for sym, s in st.session_state.stocks.items():
+        if market_filter != "All" and s["market"] != market_filter:
+            continue
+        chg = s["price"] - s["prev_close"]
+        chg_pct = (chg / s["prev_close"]) * 100
+        arrow = "▲" if chg >= 0 else "▼"
+        is_selected = (sym == st.session_state.selected_ticker)
+        btn_label = f"{'👉 ' if is_selected else ''}{sym} | ${s['price']:,.2f} ({arrow}{abs(chg_pct):.2f}%)"
+        if st.button(btn_label, key=f"watch_{sym}", use_container_width=True):
+            st.session_state.selected_ticker = sym
+            st.rerun()
+
+    st.divider()
+
+    # Manual Tick & Reset Controls
     if st.button("⚡ Advance 1 Market Tick", use_container_width=True):
         advance_market(1)
         st.rerun()
@@ -408,20 +469,6 @@ with st.sidebar:
     if st.button("🔄 Reset Simulator", use_container_width=True):
         reset_simulation()
         st.rerun()
-
-    st.markdown("### 📋 Watchlist (Click to Inspect)")
-    market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
-    for sym, s in st.session_state.stocks.items():
-        if market_filter != "All" and s["market"] != market_filter:
-            continue
-        chg = s["price"] - s["prev_close"]
-        chg_pct = (chg / s["prev_close"]) * 100
-        arrow = "▲" if chg >= 0 else "▼"
-        is_selected = (sym == st.session_state.selected_ticker)
-        btn_label = f"{'👉 ' if is_selected else ''}{sym} | ${s['price']:,.2f} ({arrow}{abs(chg_pct):.2f}%)"
-        if st.button(btn_label, key=f"watch_{sym}", use_container_width=True):
-            st.session_state.selected_ticker = sym
-            st.rerun()
 
 # -----------------------------------------------------------------------------
 # 6. BANKRUPTCY CHECK & MAIN HEADER
@@ -543,7 +590,7 @@ with col_chart:
         )
         fig_k.update_xaxes(gridcolor=GRID_COLOR)
         fig_k.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_k, use_container_width=True, config={"displayModeBar": False, "staticPlot": False})
+        st.plotly_chart(fig_k, use_container_width=True, config={"displayModeBar": False})
 
     with chart_tab2:
         df_intra = st.session_state.intraday[sel]
@@ -592,7 +639,6 @@ with col_trade:
     st.markdown("#### 📖 Level-2 Order Book")
     p = stock["price"]
     step = 0.50 if p > 100 else 0.10
-    # Deterministic seed based on price so order book doesn't jitter erratically
     ob_rng = random.Random(int(p * 100))
     ob_html = '<div class="futu-card">'
     for lvl in range(3, 0, -1):
@@ -724,11 +770,11 @@ with tab_news:
     with col_nc1:
         st.caption("Evaluate every headline yourself—verify credibility and decide whether it is bullish or bearish.")
     with col_nc2:
-        if st.button("🔄 Refresh Wire", use_container_width=True):
-            advance_market(2)
+        if st.button("🔄 Push More News", use_container_width=True):
+            advance_market(3)
             st.rerun()
 
-    for item in st.session_state.news_feed[:15]:
+    for item in st.session_state.news_feed[:20]:
         st.markdown(f"""
         <div class="news-item">
             <span class="news-time">{item['time']}</span>
@@ -766,7 +812,7 @@ with tab_log:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. SMOOTH AUTO-STREAM LOOP (NO RAPID FLASHING)
+# 10. CONTINUOUS NON-STALLING AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.bankrupt:
     time.sleep(refresh_sec)
