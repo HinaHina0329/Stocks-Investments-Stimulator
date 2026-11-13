@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & HIGH-READABILITY SLATE CHARCOAL CSS
+# 1. PAGE CONFIG & SLATE CHARCOAL + CUSTOM UI COMPONENT CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="HinaHinaPro Pro Terminal",
@@ -19,7 +19,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Soft Light-Black / Slate Charcoal Background (#1E222D) with Pure White Text */
+    /* Soft Light-Black / Slate Charcoal Background (#1E222D) */
     .stApp {
         background-color: #1E222D;
         color: #FFFFFF;
@@ -31,7 +31,7 @@ st.markdown("""
         color: #FFFFFF;
     }
 
-    /* Standard Buttons: Clean High-Contrast Dark Styling */
+    /* Standard Buttons */
     div.stButton > button {
         background-color: #343B4E !important;
         border: 1px solid #4A536B !important;
@@ -46,8 +46,6 @@ st.markdown("""
         background-color: #4A536B !important;
         border-color: #606C88 !important;
     }
-
-    /* Primary Action Button (Execute Order) */
     div.stButton > button[kind="primary"] {
         background-color: #FF4D4F !important;
         border: none !important;
@@ -55,7 +53,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Elevated Cards in Soft Charcoal (#282E3D) */
+    /* Elevated Cards (#282E3D) */
     .futu-card {
         background-color: #282E3D;
         border: 1px solid #3A4154;
@@ -74,6 +72,7 @@ st.markdown("""
         font-weight: 700;
         color: #FFFFFF;
     }
+
     /* Asian Market Colors: Red = Up, Green = Down */
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
@@ -95,6 +94,48 @@ st.markdown("""
         font-weight: 700;
         font-size: 14px;
     }
+
+    /* Bankruptcy Box: White box with red text */
+    .bankruptcy-box {
+        background-color: #FFFFFF !important;
+        color: #FF4D4F !important;
+        border: 2px solid #FF4D4F;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+    .bankruptcy-box * {
+        color: #FF4D4F !important;
+    }
+
+    /* Portfolio List & Trading Method: Black text in white box */
+    [data-testid="stDataFrame"] {
+        background-color: #FFFFFF !important;
+        border-radius: 6px;
+        padding: 4px;
+    }
+    [data-testid="stDataFrame"] * {
+        color: #000000 !important;
+        background-color: #FFFFFF !important;
+    }
+
+    /* Selectbox (Trading Method) White Box with Black Text */
+    div[data-baseweb="select"] {
+        background-color: #FFFFFF !important;
+        border-radius: 6px;
+    }
+    div[data-baseweb="select"] * {
+        color: #000000 !important;
+    }
+    ul[data-baseweb="menu"] {
+        background-color: #FFFFFF !important;
+    }
+    ul[data-baseweb="menu"] li div {
+        color: #000000 !important;
+    }
+
     .news-item {
         background-color: #282E3D;
         border-left: 3px solid #788296;
@@ -117,9 +158,6 @@ st.markdown("""
         font-size: 13px;
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
-    }
-    p, label, span, div, h1, h2, h3, h4, h5, h6 {
-        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -188,7 +226,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. FAIR-ROTATION NEWS ENGINE (1 NEWS PER STOCK PER ROUND BEFORE REPEAT)
+# 3. FAIR-ROTATION NEWS ENGINE (1 NEWS PER STOCK PER ROUND, 15-18s INTERVALS)
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -235,8 +273,8 @@ FAKE_NEWS_POOL = [
 
 def get_next_fair_news():
     """
-    Ensures every stock receives exactly 1 news item per round 
-    before any stock repeats its turn.
+    Guarantees every stock receives exactly 1 news item per round (12 stocks per round)
+    before any stock repeats. 
     """
     if not st.session_state.news_queue:
         tickers = list(STOCK_CATALOG.keys())
@@ -276,7 +314,7 @@ def reset_simulation():
     st.session_state.bankrupt = False
     st.session_state.confirm_bankruptcy = False
     st.session_state.selected_ticker = "NVDA"
-    st.session_state.tick_count = 0
+    st.session_state.tick_count = 0.0
     st.session_state.news_queue = []
     st.session_state.next_news_in = random.randint(15, 18)
     st.session_state.stocks = {}
@@ -312,7 +350,7 @@ def advance_market(dt_sec=1.0):
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003 * dt_sec
 
-    # Handle 15-18 second fair news interval
+    # 15 to 18 seconds news interval logic
     st.session_state.next_news_in -= dt_sec
     active_news = None
     if st.session_state.next_news_in <= 0:
@@ -365,14 +403,14 @@ def advance_market(dt_sec=1.0):
                 st.session_state.trade_history.insert(0, ("LIQUIDATED", sym, round(shares, 4), new_price, "Margin Call"))
 
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR CONTROLS (WATCHLIST DIRECTLY BELOW REFRESH SPEED)
+# 5. SIDEBAR CONTROLS
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = 15.0  # Fixed 15-second refresh interval per user requirement
+    refresh_sec = 15.0  # Fixed 15-second chart refresh interval
 
-    # WATCHLIST PLACED IMMEDIATELY BELOW REFRESH SPEED
+    # Watchlist directly below refresh speed
     st.markdown("### 📋 Watchlist (Click to Inspect)")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
     for sym, s in st.session_state.stocks.items():
@@ -422,6 +460,8 @@ with st.sidebar:
             else:
                 st.error("Insufficient cash!")
 
+    # Bankruptcy application with white box and red text styling
+    st.markdown('<div class="bankruptcy-box">⚠️ Bankruptcy Control</div>', unsafe_allow_html=True)
     if st.button("🏳️ Apply for Bankruptcy", use_container_width=True):
         st.session_state.confirm_bankruptcy = True
 
