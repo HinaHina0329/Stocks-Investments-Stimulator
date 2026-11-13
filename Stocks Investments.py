@@ -119,19 +119,20 @@ st.markdown("""
     }
 
     /* Tab 文字改白色 */
-    button[data-baseweb="tab"] {
-        color: #FFFFFF !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
+    button[data-baseweb="tab"],
+    button[data-baseweb="tab"] p,
+    button[data-baseweb="tab"] span {
         color: #FFFFFF !important;
     }
 
-    [data-testid="stDataFrame"] {
-        background-color: #FFFFFF !important;
-        border-radius: 6px;
-        padding: 4px;
-    }
+    [data-testid="stDataFrame"],
     [data-testid="stDataFrame"] * {
+    color: #000000 !important;
+    background-color: #FFFFFF !important;
+    }
+
+    [data-testid="stDataFrame"] th,
+    [data-testid="stDataFrame"] td {
         color: #000000 !important;
         background-color: #FFFFFF !important;
     }
