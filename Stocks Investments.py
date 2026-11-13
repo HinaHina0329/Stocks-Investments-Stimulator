@@ -51,7 +51,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Standard Dark Cards */
     .futu-card {
         background-color: #282E3D;
         border: 1px solid #3A4154;
@@ -60,7 +59,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
 
-    /* 4 Specific White Boxes with Black Text */
     .white-box-black-text {
         background-color: #FFFFFF !important;
         border: 1px solid #CCCCCC;
@@ -73,7 +71,6 @@ st.markdown("""
         color: #000000 !important;
     }
 
-    /* Bankruptcy & Liquidated Cards: White Box with Red Text */
     .bankruptcy-box {
         background-color: #FFFFFF !important;
         color: #FF4D4F !important;
@@ -111,6 +108,22 @@ st.markdown("""
         border-radius: 5px;
         font-weight: 700;
         font-size: 14px;
+    }
+
+    /* 強制把 Trading Method / Quantity 等 label 變成白色 */
+    .stSelectbox label, .stNumberInput label, .stSlider label {
+        color: #FFFFFF !important;
+    }
+    div[data-testid="stWidgetLabel"] p {
+        color: #FFFFFF !important;
+    }
+
+    /* Tab 文字改白色 */
+    button[data-baseweb="tab"] {
+        color: #FFFFFF !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #FFFFFF !important;
     }
 
     [data-testid="stDataFrame"] {
@@ -154,6 +167,20 @@ st.markdown("""
         font-size: 13px;
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
+    }
+
+    /* 下單成功後的白色確認框 */
+    .order-confirm-box {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border: 1px solid #CCCCCC;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-top: 12px;
+        font-weight: 600;
+    }
+    .order-confirm-box * {
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -222,7 +249,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. FAIR-ROTATION NEWS ENGINE (EXACTLY 1 STOCK PER NEWS, 15-18s INTERVALS)
+# 3. FAIR-ROTATION NEWS ENGINE
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -315,6 +342,7 @@ def reset_simulation():
     st.session_state.portfolio = {sym: 0.0 for sym in STOCK_CATALOG}
     st.session_state.margin_debt = {sym: 0.0 for sym in STOCK_CATALOG}
     st.session_state.trade_history = []
+    st.session_state.last_order_msg = ""          # 新增：用來顯示下單確認
 
     for sym, info in STOCK_CATALOG.items():
         prev_close = round(info["price"] * random.uniform(0.988, 1.012), 2)
@@ -402,7 +430,15 @@ with st.sidebar:
     refresh_sec = 15.0
 
     st.markdown("### 📋 Watchlist (Click to Inspect)")
-    market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
+    
+    # 恢復 All, HK, US, Crypto 標籤
+    market_filter = st.radio(
+        "Market Filter",
+        ["All", "HK", "US", "Crypto"],
+        horizontal=True,
+        label_visibility="visible"
+    )
+
     for sym, s in st.session_state.stocks.items():
         if market_filter != "All" and s["market"] != market_filter:
             continue
@@ -418,7 +454,7 @@ with st.sidebar:
     st.divider()
 
     if st.button("⚡ Advance 1 Market Tick", use_container_width=True):
-        advance_market(15.0)
+        advance_market(refresh_sec)
         st.rerun()
 
     st.divider()
@@ -450,8 +486,6 @@ with st.sidebar:
             else:
                 st.error("Insufficient cash!")
 
-    # Bankruptcy box (White box with red text)
-    st.markdown('<div class="bankruptcy-box">⚠️ Bankruptcy Control</div>', unsafe_allow_html=True)
     if st.button("🏳️ Apply for Bankruptcy", use_container_width=True):
         st.session_state.confirm_bankruptcy = True
 
@@ -510,7 +544,7 @@ m5.markdown(f'<div class="white-box-black-text"><b>🏆 True Net Worth</b><br>${
 st.divider()
 
 # -----------------------------------------------------------------------------
-# 7. SELECTED STOCK HEADER & FUNDAMENTALS (4 Boxes with Black Text)
+# 7. SELECTED STOCK HEADER
 # -----------------------------------------------------------------------------
 sel = st.session_state.selected_ticker
 stock = st.session_state.stocks[sel]
@@ -520,8 +554,6 @@ is_up = chg >= 0
 main_color_cls = "up-color" if is_up else "down-color"
 badge_cls = "badge-up" if is_up else "badge-down"
 sign = "+" if is_up else ""
-
-total_turnover = stock["price"] * stock["volume"]
 
 st.markdown(f"""
 <div class="futu-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
@@ -543,7 +575,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 4 Fundamental Boxes requested to have Black Text on White Boxes
 q1, q2, q3, q4 = st.columns(4)
 with q1:
     st.markdown(f'<div class="white-box-black-text"><b>Open / Prev Close</b><br>${stock["open"]:.2f} / ${stock["prev_close"]:.2f}</div>', unsafe_allow_html=True)
@@ -663,6 +694,7 @@ with col_trade:
     st.markdown(ob_html, unsafe_allow_html=True)
 
     st.markdown("#### 🎯 Execution Desk")
+    
     trade_method = st.selectbox(
         "Trading Method",
         [
@@ -693,14 +725,17 @@ with col_trade:
         st.caption(f"Order Value: ${order_val:,.2f}")
 
     if st.button("🚀 Execute Order Now", type="primary", use_container_width=True):
+        order_success = False
+        order_msg = ""
+
         if trade_method == "Spot Buy (Cash)":
             cost = qty * stock["price"]
             if st.session_state.cash >= cost:
                 st.session_state.cash -= cost
                 st.session_state.portfolio[sel] += qty
                 st.session_state.trade_history.insert(0, ("SPOT BUY", sel, qty, stock["price"], "Cash"))
-                st.success(f"Bought {qty} {sel} @ ${stock['price']:,.2f}")
-                st.rerun()
+                order_success = True
+                order_msg = f"Bought {qty} shares of {sel} ({stock['name']}) at ${stock['price']:,.2f}"
             else:
                 st.error("Insufficient cash!")
 
@@ -717,8 +752,8 @@ with col_trade:
                     st.session_state.cash += proceeds
                 st.session_state.portfolio[sel] -= qty
                 st.session_state.trade_history.insert(0, ("SPOT SELL", sel, qty, stock["price"], "Closed"))
-                st.success(f"Sold {qty} {sel} @ ${stock['price']:,.2f}")
-                st.rerun()
+                order_success = True
+                order_msg = f"Sold {qty} shares of {sel} ({stock['name']}) at ${stock['price']:,.2f}"
             else:
                 st.error("Not enough shares held!")
 
@@ -728,8 +763,8 @@ with col_trade:
                 st.session_state.portfolio[sel] += est_shares
                 st.session_state.margin_debt[sel] += borrowed_margin
                 st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares, 4), stock["price"], f"Loan ${borrowed_margin:,.0f}"))
-                st.success(f"Placed ${total_exposure:,.2f} ({multiplier}x) in {sel}!")
-                st.rerun()
+                order_success = True
+                order_msg = f"Opened {multiplier}x Margin Long: {est_shares:.2f} shares of {sel}"
             else:
                 st.error("Insufficient cash for margin deposit!")
 
@@ -738,8 +773,8 @@ with col_trade:
             st.session_state.cash += proceeds
             st.session_state.portfolio[sel] -= qty
             st.session_state.trade_history.insert(0, ("SHORT SELL", sel, qty, stock["price"], "Short"))
-            st.warning(f"Shorted {qty} {sel} @ ${stock['price']:,.2f}")
-            st.rerun()
+            order_success = True
+            order_msg = f"Shorted {qty} shares of {sel} ({stock['name']})"
 
         elif trade_method == "Cover Short Position":
             if st.session_state.portfolio[sel] < 0:
@@ -749,8 +784,8 @@ with col_trade:
                     st.session_state.cash -= cost
                     st.session_state.portfolio[sel] += cover_qty
                     st.session_state.trade_history.insert(0, ("COVER SHORT", sel, cover_qty, stock["price"], "Covered"))
-                    st.success(f"Covered {cover_qty} short shares of {sel}")
-                    st.rerun()
+                    order_success = True
+                    order_msg = f"Covered {cover_qty} short shares of {sel}"
                 else:
                     st.error("Insufficient cash to cover!")
             else:
@@ -765,11 +800,19 @@ with col_trade:
                 st.session_state.cash -= total_block_cost
                 st.session_state.portfolio[sel] += block_shares
                 st.session_state.trade_history.insert(0, ("BANKER BLOCK", sel, block_shares, discount_price, "Institutional -1.5%"))
-                st.success(f"Executed Banker Block for {block_shares} shares of {sel} @ ${discount_price:,.2f}!")
-                st.rerun()
+                order_success = True
+                order_msg = f"Banker Block: Bought {block_shares} shares of {sel} at ${discount_price:,.2f}"
+
+        if order_success:
+            st.session_state.last_order_msg = order_msg
+            st.rerun()
+
+    # 顯示下單成功確認框（白色底黑字）
+    if st.session_state.get("last_order_msg"):
+        st.markdown(f'<div class="order-confirm-box">✅ {st.session_state.last_order_msg}</div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 9. UNFILTERED MYSTERY NEWS WIRE & PORTFOLIO/LOG TABS
+# 9. NEWS / PORTFOLIO / LOG TABS
 # -----------------------------------------------------------------------------
 st.divider()
 tab_news, tab_port, tab_log = st.tabs(["📰 Live Market Wire", "💼 Portfolio & Margin Status", "📜 Order Execution Log"])
@@ -817,13 +860,12 @@ with tab_port:
 with tab_log:
     if st.session_state.trade_history:
         log_df = pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"])
-        # Format LIQUIDATED notes in red text styling
         st.dataframe(log_df, use_container_width=True, hide_index=True)
     else:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. STABLE 15-SECOND AUTO-REFRESH LOOP
+# 10. STABLE AUTO-REFRESH
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.bankrupt:
     time.sleep(refresh_sec)
