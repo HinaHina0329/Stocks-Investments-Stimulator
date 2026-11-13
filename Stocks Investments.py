@@ -85,11 +85,6 @@ st.markdown("""
         color: #FF4D4F !important;
     }
 
-    .liquidated-text {
-        color: #FF4D4F !important;
-        font-weight: 700;
-    }
-
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
 
@@ -110,19 +105,32 @@ st.markdown("""
         font-size: 14px;
     }
 
-    /* 強制把 Trading Method / Quantity 等 label 變成白色 */
-    .stSelectbox label, .stNumberInput label, .stSlider label {
+    /* ========== 強制白色文字（重點修正） ========== */
+    label[data-testid="stWidgetLabel"] p {
         color: #FFFFFF !important;
     }
-    div[data-testid="stWidgetLabel"] p {
+    .stSelectbox label p,
+    .stNumberInput label p,
+    .stSlider label p {
+        color: #FFFFFF !important;
+    }
+    div[data-testid="stWidgetLabel"] > div > p {
         color: #FFFFFF !important;
     }
 
-    /* Tab 文字改白色 */
+    /* Tab 文字強制白色 */
     button[data-baseweb="tab"] {
         color: #FFFFFF !important;
     }
+    button[data-baseweb="tab"] p {
+        color: #FFFFFF !important;
+    }
     button[data-baseweb="tab"][aria-selected="true"] {
+        color: #FFFFFF !important;
+    }
+
+    /* 其他文字 */
+    .stMarkdown, .stMarkdown p, .stCaption, .stCaption p {
         color: #FFFFFF !important;
     }
 
@@ -169,7 +177,6 @@ st.markdown("""
         border-bottom: 1px solid #353B4B;
     }
 
-    /* 下單成功後的白色確認框 */
     .order-confirm-box {
         background-color: #FFFFFF !important;
         color: #000000 !important;
