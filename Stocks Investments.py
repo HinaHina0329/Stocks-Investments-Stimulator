@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & EYE-FRIENDLY "LIGHT BLACK" (SLATE CHARCOAL) CSS
+# 1. PAGE CONFIG & HIGH-READABILITY SLATE CHARCOAL CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="HinaHinaPro Pro Terminal",
@@ -19,37 +19,32 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Soft Light-Black / Slate Charcoal Background (#1E222D) */
+    /* Soft Light-Black / Slate Charcoal Background (#1E222D) with Pure White Text */
     .stApp {
         background-color: #1E222D;
-        color: #F0F3FA;
+        color: #FFFFFF;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     section[data-testid="stSidebar"] {
         background-color: #252A37;
         border-right: 1px solid #363C4E;
+        color: #FFFFFF;
     }
 
-    /* ALL WHITE / SECONDARY BUTTONS: RED TEXT FOR HIGH READABILITY */
-    div.stButton > button[kind="secondary"],
-    div.stButton > button:not([kind="primary"]) {
-        background-color: #F4F6FA !important;
-        border: 1px solid #D0D7DE !important;
-        color: #D9232E !important;
-        font-weight: 700 !important;
+    /* Standard Buttons: Clean High-Contrast Dark Styling */
+    div.stButton > button {
+        background-color: #343B4E !important;
+        border: 1px solid #4A536B !important;
+        color: #FFFFFF !important;
+        font-weight: 600 !important;
     }
-    div.stButton > button[kind="secondary"] p,
-    div.stButton > button[kind="secondary"] span,
-    div.stButton > button:not([kind="primary"]) p,
-    div.stButton > button:not([kind="primary"]) span {
-        color: #D9232E !important;
-        font-weight: 700 !important;
+    div.stButton > button p,
+    div.stButton > button span {
+        color: #FFFFFF !important;
     }
-    div.stButton > button[kind="secondary"]:hover,
-    div.stButton > button:not([kind="primary"]):hover {
-        background-color: #FFEBEB !important;
-        border-color: #D9232E !important;
-        color: #B8141E !important;
+    div.stButton > button:hover {
+        background-color: #4A536B !important;
+        border-color: #606C88 !important;
     }
 
     /* Primary Action Button (Execute Order) */
@@ -58,10 +53,6 @@ st.markdown("""
         border: none !important;
         color: #FFFFFF !important;
         font-weight: 700 !important;
-    }
-    div.stButton > button[kind="primary"] p,
-    div.stButton > button[kind="primary"] span {
-        color: #FFFFFF !important;
     }
 
     /* Elevated Cards in Soft Charcoal (#282E3D) */
@@ -74,7 +65,7 @@ st.markdown("""
     }
     .futu-label {
         font-size: 12px;
-        color: #A6B0C3;
+        color: #C5CEE0;
         margin-bottom: 4px;
         font-weight: 500;
     }
@@ -86,7 +77,7 @@ st.markdown("""
     /* Asian Market Colors: Red = Up, Green = Down */
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
-    .flat-color { color: #A6B0C3 !important; }
+    .flat-color { color: #C5CEE0 !important; }
 
     .badge-up {
         background-color: rgba(255, 77, 79, 0.20);
@@ -104,7 +95,6 @@ st.markdown("""
         font-weight: 700;
         font-size: 14px;
     }
-    /* Clean Neutral News Card (No hints, no tags, no colors) */
     .news-item {
         background-color: #282E3D;
         border-left: 3px solid #788296;
@@ -112,22 +102,25 @@ st.markdown("""
         margin-bottom: 10px;
         border-radius: 0 6px 6px 0;
         font-size: 14px;
-        color: #F0F3FA;
+        color: #FFFFFF;
         line-height: 1.45;
     }
     .news-time {
-        color: #9BA5B7;
+        color: #A0ACB8;
         font-size: 11px;
         margin-bottom: 4px;
         display: block;
     }
-    /* Order Book Table */
     .ob-row {
         display: flex;
         justify-content: space-between;
         font-size: 13px;
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
+    }
+    /* Ensure all markdown/text elements default to high-readability white */
+    p, label, span, div, h1, h2, h3, h4, h5, h6 {
+        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -196,10 +189,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. INFINITE UNFILTERED NEWS ENGINE
-#    - No labels (Real vs Fake hidden)
-#    - No sentiment hints (Good vs Bad hidden)
-#    - ONLY REAL NEWS affects stock prices; FAKE NEWS has 0.0 price impact!
+# 3. UNFILTERED NEWS ENGINE (ONLY REAL NEWS AFFECTS PRICE)
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -241,7 +231,6 @@ REAL_DYNAMIC_TEMPLATES = [
 ]
 
 FAKE_NEWS_POOL = [
-    # Impact is strictly 0.0 for all fake/make-up news!
     ("NVDA", "NVIDIA announces it will stop making GPUs entirely to pivot toward artisanal sourdough bakeries.", 0.0),
     ("0700.HK", "Tencent plans to replace all WeChat text messages with mandatory 30-second interpretive dance clips.", 0.0),
     ("TSLA", "Tesla unveils a Cyber-Submarine powered exclusively by unresolved social media debates.", 0.0),
@@ -257,7 +246,6 @@ FAKE_NEWS_POOL = [
 ]
 
 def generate_news_event(tick_count):
-    """Generates infinite news: ~75% real (moves price), ~25% fake (zero price effect). No hints shown."""
     is_real = random.random() < 0.75
     timestamp = datetime.now().strftime("%H:%M:%S")
 
@@ -269,7 +257,7 @@ def generate_news_event(tick_count):
         actual_impact = base_impact * random.uniform(0.85, 1.25)
     else:
         ticker, headline, _ = random.choice(FAKE_NEWS_POOL)
-        actual_impact = 0.0  # Fake news NEVER affects the stock price
+        actual_impact = 0.0
 
     return {
         "time": timestamp,
@@ -314,7 +302,7 @@ def reset_simulation():
         st.session_state.history[sym] = df_hist
         st.session_state.intraday[sym] = generate_intraday_series(info["price"], prev_close)
 
-    st.session_state.news_feed = [generate_news_event(i) for i in range(12)]
+    st.session_state.news_feed = [generate_news_event(i) for i in range(15)]
     st.session_state.news_feed.reverse()
 
 if "stocks" not in st.session_state:
@@ -326,17 +314,15 @@ def advance_market(n_ticks=1):
         if st.session_state.bank_loan > 0:
             st.session_state.bank_loan += st.session_state.bank_loan * 0.00003
 
-        # Generate breaking news frequently (85% chance per tick)
         active_news = None
-        if random.random() < 0.85:
+        if random.random() < 0.90:
             active_news = generate_news_event(st.session_state.tick_count)
             st.session_state.news_feed.insert(0, active_news)
-            if len(st.session_state.news_feed) > 150:
+            if len(st.session_state.news_feed) > 200:
                 st.session_state.news_feed.pop()
 
         for sym, s in st.session_state.stocks.items():
             drift = 0.0001
-            # ONLY REAL NEWS moves the price (fake news has impact == 0.0)
             if active_news and active_news["is_real"] and sym == active_news["ticker"]:
                 drift += active_news["impact"]
 
@@ -346,12 +332,11 @@ def advance_market(n_ticks=1):
             s["high"] = max(s["high"], new_price)
             s["low"] = min(s["low"], new_price)
 
-            vol_boost = 2.4 if (active_news and active_news["is_real"] and sym == active_news["ticker"]) else 1.0
-            added_vol = int(random.uniform(150_000, 1_200_000) * vol_boost)
+            vol_boost = 2.5 if (active_news and active_news["is_real"] and sym == active_news["ticker"]) else 1.0
+            added_vol = int(random.uniform(200_000, 1_500_000) * vol_boost)
             s["volume"] += added_vol
             s["pred_volume"] = int(s["volume"] * random.uniform(1.04, 1.25))
 
-            # Update Intraday smoothly
             intra = st.session_state.intraday[sym]
             new_time = (datetime.strptime(intra.iloc[-1]["Time"], "%H:%M") + timedelta(minutes=1)).strftime("%H:%M")
             new_row = pd.DataFrame([{
@@ -362,7 +347,6 @@ def advance_market(n_ticks=1):
             }])
             st.session_state.intraday[sym] = pd.concat([intra.iloc[1:], new_row], ignore_index=True)
 
-            # Update Latest Daily K-Line Candle
             hist = st.session_state.history[sym]
             hist.at[hist.index[-1], "Close"] = new_price
             hist.at[hist.index[-1], "High"] = max(hist.iloc[-1]["High"], new_price)
@@ -370,7 +354,6 @@ def advance_market(n_ticks=1):
             hist.at[hist.index[-1], "Volume"] = s["volume"]
             hist.at[hist.index[-1], "Predicted_Volume"] = s["pred_volume"]
 
-            # Margin Call check
             shares = st.session_state.portfolio[sym]
             debt = st.session_state.margin_debt[sym]
             if shares > 0 and debt > 0:
@@ -381,14 +364,14 @@ def advance_market(n_ticks=1):
                     st.session_state.trade_history.insert(0, ("LIQUIDATED", sym, round(shares, 4), new_price, "Margin Call"))
 
 # -----------------------------------------------------------------------------
-# 5. SIDEBAR: CONTROLS -> WATCHLIST DIRECTLY BELOW REFRESH SPEED -> FACILITIES
+# 5. SIDEBAR CONTROLS (WATCHLIST DIRECTLY BELOW REFRESH SPEED)
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.4, max_value=3.0, value=0.8, step=0.2)
+    refresh_sec = st.slider("Refresh Speed (Seconds)", min_value=0.4, max_value=3.0, value=0.6, step=0.2)
 
-    # WATCHLIST PLACED DIRECTLY BELOW REFRESH SPEED
+    # WATCHLIST PLACED IMMEDIATELY BELOW REFRESH SPEED
     st.markdown("### 📋 Watchlist (Click to Inspect)")
     market_filter = st.radio("Market Filter", ["All", "HK", "US", "Crypto"], horizontal=True, label_visibility="collapsed")
     for sym, s in st.session_state.stocks.items():
@@ -405,14 +388,12 @@ with st.sidebar:
 
     st.divider()
 
-    # Manual Tick & Reset Controls
     if st.button("⚡ Advance 1 Market Tick", use_container_width=True):
         advance_market(1)
         st.rerun()
 
     st.divider()
 
-    # Commercial Bank Facility
     st.subheader("🏦 Commercial Bank Facility")
     remaining_credit = max(0.0, MAX_LOAN - st.session_state.bank_loan)
     st.write(f"**Bank Debt:** ${st.session_state.bank_loan:,.2f}")
@@ -515,8 +496,8 @@ st.markdown(f"""
 <div class="futu-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
     <div>
         <span style="font-size:24px; font-weight:800; color:#FFFFFF;">{stock['name']}</span>
-        <span style="font-size:16px; color:#A6B0C3; margin-left:8px;">({sel} · {stock['market']})</span>
-        <span style="background:#363C4E; color:#E1E6F0; font-size:12px; padding:3px 9px; border-radius:4px; margin-left:10px;">
+        <span style="font-size:16px; color:#C5CEE0; margin-left:8px;">({sel} · {stock['market']})</span>
+        <span style="background:#363C4E; color:#FFFFFF; font-size:12px; padding:3px 9px; border-radius:4px; margin-left:10px;">
             {stock['sector']}
         </span>
     </div>
@@ -546,7 +527,7 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS (ZERO-FLASHING STATIC RENDERING) & ORDER BOOK / EXECUTION DESK
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK
 # -----------------------------------------------------------------------------
 col_chart, col_trade = st.columns([2.3, 1])
 
@@ -581,7 +562,7 @@ with col_chart:
             template="plotly_dark",
             paper_bgcolor=CHART_BG,
             plot_bgcolor=CHART_BG,
-            font=dict(color="#F0F3FA"),
+            font=dict(color="#FFFFFF"),
             height=440,
             margin=dict(l=10, r=10, t=20, b=10),
             xaxis_rangeslider_visible=False,
@@ -601,12 +582,12 @@ with col_chart:
             line=dict(color=line_col, width=2.4), fill="tozeroy",
             fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)", name="Price"
         ))
-        fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#A6B0C3", annotation_text="Prev Close")
+        fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0", annotation_text="Prev Close")
         fig_intra.update_layout(
             template="plotly_dark",
             paper_bgcolor=CHART_BG,
             plot_bgcolor=CHART_BG,
-            font=dict(color="#F0F3FA"),
+            font=dict(color="#FFFFFF"),
             height=440,
             margin=dict(l=10, r=10, t=20, b=10),
             uirevision=f"intra_{sel}",
@@ -625,7 +606,7 @@ with col_chart:
             template="plotly_dark",
             paper_bgcolor=CHART_BG,
             plot_bgcolor=CHART_BG,
-            font=dict(color="#F0F3FA"),
+            font=dict(color="#FFFFFF"),
             height=440,
             margin=dict(l=10, r=10, t=20, b=10),
             uirevision=f"vol_{sel}",
@@ -644,12 +625,12 @@ with col_trade:
     for lvl in range(3, 0, -1):
         ask_p = p + lvl * step
         ask_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#A6B0C3;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span>{ask_q:,}</span></div>'
+        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span>{ask_q:,}</span></div>'
     ob_html += f'<div class="ob-row" style="background:#343B4E; font-weight:700;"><span>LAST</span><span class="{main_color_cls}">${p:.2f}</span><span>Lot: {stock["lot"]}</span></div>'
     for lvl in range(1, 4):
         bid_p = max(0.1, p - lvl * step)
         bid_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#A6B0C3;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span>{bid_q:,}</span></div>'
+        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span>{bid_q:,}</span></div>'
     ob_html += '</div>'
     st.markdown(ob_html, unsafe_allow_html=True)
 
@@ -770,8 +751,8 @@ with tab_news:
     with col_nc1:
         st.caption("Evaluate every headline yourself—verify credibility and decide whether it is bullish or bearish.")
     with col_nc2:
-        if st.button("🔄 Push More News", use_container_width=True):
-            advance_market(3)
+        if st.button("🔄 Refresh News", use_container_width=True):
+            advance_market(2)
             st.rerun()
 
     for item in st.session_state.news_feed[:20]:
@@ -812,7 +793,7 @@ with tab_log:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. CONTINUOUS NON-STALLING AUTO-STREAM LOOP
+# 10. NON-FLASHING AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
 if live_market and not st.session_state.bankrupt:
     time.sleep(refresh_sec)
