@@ -227,7 +227,7 @@ FAKE_NEWS_POOL = [
 def generate_stock_news_schedule():
     """
     Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds.
-    Splits 0-180s into 12 equal 15-second buckets to ensure high even distribution 
+    Splits 0-180s into 12 equal 15-second buckets so news is evenly distributed 
     without clumping, while randomizing the exact timestamp within each bucket.
     """
     stocks_list = list(STOCK_CATALOG.keys())
@@ -239,7 +239,6 @@ def generate_stock_news_schedule():
     for i, sym in enumerate(stocks_list):
         bucket_start = i * bucket_size
         bucket_end = (i + 1) * bucket_size
-        # Random time within this specific 15s window
         t = random.uniform(bucket_start + 1.0, bucket_end - 1.0)
         
         is_real = random.random() < 0.75
@@ -544,25 +543,14 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FLICKER-FREE FRAGMENT)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A STABLE FRAGMENT)
 # -----------------------------------------------------------------------------
 @st.fragment(run_every=refresh_sec)
 def render_trading_terminal_fragment():
-    # Advance market ticks automatically inside the fragment without full-page reloads
     if live_market and not st.session_state.bankrupt:
         advance_market(refresh_sec)
 
     col_chart, col_trade = st.columns([2.3, 1])
-
-    CHART_BG = "#282E3D"
-    GRID_COLOR = "#363D4F"
-
-    with col_chart:
-        chart_tab1, chart_tab2, chart_tab3 = st.tabs([
-            "🕯️ Daily K-Line & MA",
-            "📈 Intraday Price vs. Time",
-            "📊 Traded vs. Predicted Volume"
-        ])
 
     CHART_BG = "#282E3D"
     GRID_COLOR = "#363D4F"
@@ -827,7 +815,3 @@ with tab_log:
         st.dataframe(pd.DataFrame(st.session_state.trade_history, columns=["Method", "Ticker", "Shares", "Exec Price", "Notes"]), use_container_width=True, hide_index=True)
     else:
         st.caption("No orders executed yet.")
-
-# -----------------------------------------------------------------------------
-# 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
-# -----------------------------------------------------------------------------
