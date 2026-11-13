@@ -8,10 +8,10 @@ import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & SLATE CHARCOAL + STRICT PURE WHITE / WHITE-BOX CSS
+# 1. PAGE CONFIG & SLATE CHARCOAL + STRICT WHITE/BLACK BOX CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="HinaHinaPro Terminal",
+    page_title="HinaHinaPro Pro Terminal",
     page_icon="🐂",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -110,7 +110,7 @@ st.markdown("""
         color: #FF4D4F !important;
     }
 
-    /* Portfolio List & Trading Method: Black text in white box */
+    /* Portfolio List & Tables: Black text in white box */
     [data-testid="stDataFrame"] {
         background-color: #FFFFFF !important;
         border-radius: 6px;
