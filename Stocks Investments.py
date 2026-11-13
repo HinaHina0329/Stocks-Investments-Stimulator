@@ -226,9 +226,8 @@ FAKE_NEWS_POOL = [
 
 def generate_stock_news_schedule():
     """
-    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds.
-    Splits 0-180s into 12 equal 15-second buckets so news is evenly distributed 
-    without clumping, while randomizing the exact timestamp within each bucket.
+    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds,
+    evenly spread across 12 distinct 15-second buckets so they never clump up.
     """
     stocks_list = list(STOCK_CATALOG.keys())
     random.shuffle(stocks_list)
@@ -543,10 +542,13 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A STABLE FRAGMENT)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK (AUTO-ADVANCING MARKET TICKER)
 # -----------------------------------------------------------------------------
-@st.fragment
+@st.fragment(run_every=refresh_sec)
 def render_trading_terminal_fragment():
+    if live_market and not st.session_state.bankrupt:
+        advance_market(refresh_sec)
+
     col_chart, col_trade = st.columns([2.3, 1])
 
     CHART_BG = "#282E3D"
@@ -684,8 +686,80 @@ def render_trading_terminal_fragment():
             st.caption(f"Order Value: ${order_val:,.2f}")
 
         if st.button("🚀 Execute Order Now", type="primary", use_container_width=True, key="exec_order_btn"):
-            # (Keep your order execution logic here...)
-            pass
+            if trade_method == "Spot Buy (Cash)":
+                cost = qty * stock["price"]
+                if st.session_state.cash >= cost:
+                    st.session_state.cash -= cost
+                    st.session_state.portfolio[sel] += qty
+                    st.session_state.trade_history.insert(0, ("SPOT BUY", sel, qty, stock["price"], "Cash"))
+                    st.success(f"Bought {qty} {sel} @ ${stock['price']:,.2f}")
+                    st.rerun()
+                else:
+                    st.error("Insufficient cash!")
+
+            elif trade_method == "Spot Sell (Close Long)":
+                if st.session_state.portfolio[sel] >= qty:
+                    proceeds = qty * stock["price"]
+                    if st.session_state.margin_debt[sel] > 0:
+                        ratio = qty / st.session_state.portfolio[sel]
+                        debt_repaid = st.session_state.margin_debt[sel] * ratio
+                        st.session_state.margin_debt[sel] -= debt_repaid
+                        net_proceeds = proceeds - debt_repaid
+                        st.session_state.cash += net_proceeds
+                    else:
+                        st.session_state.cash += proceeds
+                    st.session_state.portfolio[sel] -= qty
+                    st.session_state.trade_history.insert(0, ("SPOT SELL", sel, qty, stock["price"], "Closed"))
+                    st.success(f"Sold {qty} {sel} @ ${stock['price']:,.2f}")
+                    st.rerun()
+                else:
+                    st.error("Not enough shares held!")
+
+            elif trade_method == "Leveraged Multiplier (Margin Loan)":
+                if st.session_state.cash >= margin_deposit:
+                    st.session_state.cash -= margin_deposit
+                    st.session_state.portfolio[sel] += est_shares
+                    st.session_state.margin_debt[sel] += borrowed_margin
+                    st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares, 4), stock["price"], f"Loan ${borrowed_margin:,.0f}"))
+                    st.success(f"Placed ${total_exposure:,.2f} ({multiplier}x) in {sel}!")
+                    st.rerun()
+                else:
+                    st.error("Insufficient cash for margin deposit!")
+
+            elif trade_method == "Short Sell (Bearish)":
+                proceeds = qty * stock["price"]
+                st.session_state.cash += proceeds
+                st.session_state.portfolio[sel] -= qty
+                st.session_state.trade_history.insert(0, ("SHORT SELL", sel, qty, stock["price"], "Short"))
+                st.warning(f"Shorted {qty} {sel} @ ${stock['price']:,.2f}")
+                st.rerun()
+
+            elif trade_method == "Cover Short Position":
+                if st.session_state.portfolio[sel] < 0:
+                    cover_qty = min(qty, abs(st.session_state.portfolio[sel]))
+                    cost = cover_qty * stock["price"]
+                    if st.session_state.cash >= cost:
+                        st.session_state.cash -= cost
+                        st.session_state.portfolio[sel] += cover_qty
+                        st.session_state.trade_history.insert(0, ("COVER SHORT", sel, cover_qty, stock["price"], "Covered"))
+                        st.success(f"Covered {cover_qty} short shares of {sel}")
+                        st.rerun()
+                    else:
+                        st.error("Insufficient cash to cover!")
+                else:
+                    st.error("No open short position for this stock.")
+
+            elif trade_method == "Banker Method (Institutional Block)":
+                if st.session_state.bank_loan > 0:
+                    st.error("❌ Rejected: Banker Method prohibited while active Bank Loan exists!")
+                elif st.session_state.cash < total_block_cost:
+                    st.error("Insufficient cash for Institutional Block!")
+                else:
+                    st.session_state.cash -= total_block_cost
+                    st.session_state.portfolio[sel] += block_shares
+                    st.session_state.trade_history.insert(0, ("BANKER BLOCK", sel, block_shares, discount_price, "Institutional -1.5%"))
+                    st.success(f"Executed Banker Block for {block_shares} shares of {sel} @ ${discount_price:,.2f}!")
+                    st.rerun()
 
 render_trading_terminal_fragment()
 
