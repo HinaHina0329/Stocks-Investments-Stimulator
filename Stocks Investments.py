@@ -226,8 +226,9 @@ FAKE_NEWS_POOL = [
 
 def generate_stock_news_schedule():
     """
-    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds,
-    evenly spread across 12 distinct 15-second buckets so they never clump up.
+    Guarantees exactly 12 news events (1 for each of the 12 stocks) across 180 seconds.
+    Splits 0-180s into 12 equal 15-second buckets to ensure high even distribution 
+    without clumping, while randomizing the exact timestamp within each bucket.
     """
     stocks_list = list(STOCK_CATALOG.keys())
     random.shuffle(stocks_list)
@@ -238,6 +239,7 @@ def generate_stock_news_schedule():
     for i, sym in enumerate(stocks_list):
         bucket_start = i * bucket_size
         bucket_end = (i + 1) * bucket_size
+        # Random time within this specific 15s window
         t = random.uniform(bucket_start + 1.0, bucket_end - 1.0)
         
         is_real = random.random() < 0.75
@@ -542,219 +544,223 @@ with q6:
     st.markdown(f'<div class="futu-card"><div class="futu-label">P/E (TTM) · Mkt Cap</div><div class="futu-val">{stock["pe"]}x · {stock["mkt_cap"]}</div></div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 8. CHARTS & ORDER BOOK / EXECUTION DESK (RENDERED ONCE OUTSIDE FRAGMENT)
+# 8. CHARTS & ORDER BOOK / EXECUTION DESK (ISOLATED IN A FLICKER-FREE FRAGMENT)
 # -----------------------------------------------------------------------------
-col_chart, col_trade = st.columns([2.3, 1])
+@st.fragment
+def render_trading_terminal_fragment():
+    col_chart, col_trade = st.columns([2.3, 1])
 
-CHART_BG = "#282E3D"
-GRID_COLOR = "#363D4F"
+    CHART_BG = "#282E3D"
+    GRID_COLOR = "#363D4F"
 
-with col_chart:
-    chart_tab1, chart_tab2, chart_tab3 = st.tabs([
-        "🕯️ Daily K-Line & MA",
-        "📈 Intraday Price vs. Time",
-        "📊 Traded vs. Predicted Volume"
-    ])
+    with col_chart:
+        chart_tab1, chart_tab2, chart_tab3 = st.tabs([
+            "🕯️ Daily K-Line & MA",
+            "📈 Intraday Price vs. Time",
+            "📊 Traded vs. Predicted Volume"
+        ])
 
-    df_hist = st.session_state.history[sel].copy()
-    df_hist["MA5"] = df_hist["Close"].rolling(5).mean()
-    df_hist["MA10"] = df_hist["Close"].rolling(10).mean()
+        df_hist = st.session_state.history[sel].copy()
+        df_hist["MA5"] = df_hist["Close"].rolling(5).mean()
+        df_hist["MA10"] = df_hist["Close"].rolling(10).mean()
 
-    with chart_tab1:
-        fig_k = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.72, 0.28])
-        fig_k.add_trace(go.Candlestick(
-            x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"], low=df_hist["Low"], close=df_hist["Close"],
-            increasing_line_color="#FF4D4F", increasing_fillcolor="#FF4D4F",
-            decreasing_line_color="#00D26A", decreasing_fillcolor="#00D26A",
-            name="K-Line"
-        ), row=1, col=1)
-        fig_k.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA5"], line=dict(color="#FFD60A", width=1.4), name="MA5"), row=1, col=1)
-        fig_k.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA10"], line=dict(color="#5AC8FA", width=1.4), name="MA10"), row=1, col=1)
+        with chart_tab1:
+            fig_k = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_heights=[0.72, 0.28])
+            fig_k.add_trace(go.Candlestick(
+                x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"], low=df_hist["Low"], close=df_hist["Close"],
+                increasing_line_color="#FF4D4F", increasing_fillcolor="#FF4D4F",
+                decreasing_line_color="#00D26A", decreasing_fillcolor="#00D26A",
+                name="K-Line"
+            ), row=1, col=1)
+            fig_k.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA5"], line=dict(color="#FFD60A", width=1.4), name="MA5"), row=1, col=1)
+            fig_k.add_trace(go.Scatter(x=df_hist["Date"], y=df_hist["MA10"], line=dict(color="#5AC8FA", width=1.4), name="MA10"), row=1, col=1)
 
-        vol_colors = ["#FF4D4F" if c >= o else "#00D26A" for c, o in zip(df_hist["Close"], df_hist["Open"])]
-        fig_k.add_trace(go.Bar(x=df_hist["Date"], y=df_hist["Volume"], marker_color=vol_colors, name="Volume"), row=2, col=1)
-        fig_k.update_layout(
-            template="plotly_dark",
-            paper_bgcolor=CHART_BG,
-            plot_bgcolor=CHART_BG,
-            font=dict(color="#FFFFFF"),
-            height=440,
-            margin=dict(l=10, r=10, t=20, b=10),
-            xaxis_rangeslider_visible=False,
-            uirevision=f"kline_{sel}",
-            transition_duration=0
+            vol_colors = ["#FF4D4F" if c >= o else "#00D26A" for c, o in zip(df_hist["Close"], df_hist["Open"])]
+            fig_k.add_trace(go.Bar(x=df_hist["Date"], y=df_hist["Volume"], marker_color=vol_colors, name="Volume"), row=2, col=1)
+            fig_k.update_layout(
+                template="plotly_dark",
+                paper_bgcolor=CHART_BG,
+                plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"),
+                height=440,
+                margin=dict(l=10, r=10, t=20, b=10),
+                xaxis_rangeslider_visible=False,
+                uirevision=f"kline_{sel}",
+                transition_duration=0
+            )
+            fig_k.update_xaxes(gridcolor=GRID_COLOR)
+            fig_k.update_yaxes(gridcolor=GRID_COLOR)
+            st.plotly_chart(fig_k, use_container_width=True, config={"displayModeBar": False})
+
+        with chart_tab2:
+            df_intra = st.session_state.intraday[sel]
+            line_col = "#FF4D4F" if is_up else "#00D26A"
+            fig_intra = go.Figure()
+            fig_intra.add_trace(go.Scatter(
+                x=df_intra["Time"], y=df_intra["Price"], mode="lines",
+                line=dict(color=line_col, width=2.4), fill="tozeroy",
+                fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)", name="Price"
+            ))
+            fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0", annotation_text="Prev Close")
+            fig_intra.update_layout(
+                template="plotly_dark",
+                paper_bgcolor=CHART_BG,
+                plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"),
+                height=440,
+                margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"intra_{sel}",
+                transition_duration=0
+            )
+            fig_intra.update_xaxes(gridcolor=GRID_COLOR)
+            fig_intra.update_yaxes(gridcolor=GRID_COLOR)
+            st.plotly_chart(fig_intra, use_container_width=True, config={"displayModeBar": False})
+
+        with chart_tab3:
+            recent_df = df_hist.tail(25)
+            fig_vol = go.Figure()
+            fig_vol.add_trace(go.Bar(x=recent_df["Date"], y=recent_df["Volume"], name="Actual Traded Volume", marker_color="#FF8533"))
+            fig_vol.add_trace(go.Scatter(x=recent_df["Date"], y=recent_df["Predicted_Volume"], name="Predicted Volume", mode="lines+markers", line=dict(color="#66B2FF", width=2.5, dash="dot")))
+            fig_vol.update_layout(
+                template="plotly_dark",
+                paper_bgcolor=CHART_BG,
+                plot_bgcolor=CHART_BG,
+                font=dict(color="#FFFFFF"),
+                height=440,
+                margin=dict(l=10, r=10, t=20, b=10),
+                uirevision=f"vol_{sel}",
+                transition_duration=0
+            )
+            fig_vol.update_xaxes(gridcolor=GRID_COLOR)
+            fig_vol.update_yaxes(gridcolor=GRID_COLOR)
+            st.plotly_chart(fig_vol, use_container_width=True, config={"displayModeBar": False})
+
+    with col_trade:
+        st.markdown("#### 📖 Level-2 Order Book")
+        p = stock["price"]
+        step = 0.50 if p > 100 else 0.10
+        ob_rng = random.Random(int(p * 100))
+        ob_html = '<div class="futu-card">'
+        for lvl in range(3, 0, -1):
+            ask_p = p + lvl * step
+            ask_q = ob_rng.randint(15, 150) * stock["lot"]
+            ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span>{ask_q:,}</span></div>'
+        ob_html += f'<div class="ob-row" style="background:#343B4E; font-weight:700;"><span>LAST</span><span class="{main_color_cls}">${p:.2f}</span><span>Lot: {stock["lot"]}</span></div>'
+        for lvl in range(1, 4):
+            bid_p = max(0.1, p - lvl * step)
+            bid_q = ob_rng.randint(15, 150) * stock["lot"]
+            ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span>{bid_q:,}</span></div>'
+        ob_html += '</div>'
+        st.markdown(ob_html, unsafe_allow_html=True)
+
+        st.markdown("#### 🎯 Execution Desk")
+        trade_method = st.selectbox(
+            "Trading Method",
+            [
+                "Spot Buy (Cash)",
+                "Spot Sell (Close Long)",
+                "Leveraged Multiplier (Margin Loan)",
+                "Short Sell (Bearish)",
+                "Cover Short Position",
+                "Banker Method (Institutional Block)"
+            ],
+            key="trade_method_select"
         )
-        fig_k.update_xaxes(gridcolor=GRID_COLOR)
-        fig_k.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_k, use_container_width=True, key=f"chart_k_{sel}", config={"displayModeBar": False})
 
-    with chart_tab2:
-        df_intra = st.session_state.intraday[sel]
-        line_col = "#FF4D4F" if is_up else "#00D26A"
-        fig_intra = go.Figure()
-        fig_intra.add_trace(go.Scatter(
-            x=df_intra["Time"], y=df_intra["Price"], mode="lines",
-            line=dict(color=line_col, width=2.4), fill="tozeroy",
-            fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)", name="Price"
-        ))
-        fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0", annotation_text="Prev Close")
-        fig_intra.update_layout(
-            template="plotly_dark",
-            paper_bgcolor=CHART_BG,
-            plot_bgcolor=CHART_BG,
-            font=dict(color="#FFFFFF"),
-            height=440,
-            margin=dict(l=10, r=10, t=20, b=10),
-            uirevision=f"intra_{sel}",
-            transition_duration=0
-        )
-        fig_intra.update_xaxes(gridcolor=GRID_COLOR)
-        fig_intra.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_intra, use_container_width=True, key=f"chart_intra_{sel}", config={"displayModeBar": False})
+        if trade_method == "Leveraged Multiplier (Margin Loan)":
+            margin_deposit = st.number_input("Cash Margin Deposit ($)", min_value=100.0, max_value=max(100.0, st.session_state.cash), value=min(5000.0, max(100.0, st.session_state.cash)), step=500.0, key="margin_dep_input")
+            multiplier = st.select_slider("Leverage Multiplier", options=[2, 5, 10, 20, 50, 100], value=10, key="lev_slider")
+            total_exposure = margin_deposit * multiplier
+            borrowed_margin = total_exposure - margin_deposit
+            est_shares = total_exposure / stock["price"]
+            st.caption(f"Exposure: ${total_exposure:,.2f} | Loan: ${borrowed_margin:,.2f}")
+        elif trade_method == "Banker Method (Institutional Block)":
+            block_shares = st.number_input("Institutional Block Size (Shares)", min_value=100, max_value=50000, value=500, step=100, key="block_shares_input")
+            discount_price = round(stock["price"] * 0.985, 2)
+            total_block_cost = block_shares * discount_price
+            st.caption(f"Discount Price (-1.5%): ${discount_price:,.2f} | Cost: ${total_block_cost:,.2f}")
+        else:
+            qty = st.number_input("Quantity (Shares)", min_value=1.0, max_value=100000.0, value=10.0, step=1.0, key="qty_input")
+            order_val = qty * stock["price"]
+            st.caption(f"Order Value: ${order_val:,.2f}")
 
-    with chart_tab3:
-        recent_df = df_hist.tail(25)
-        fig_vol = go.Figure()
-        fig_vol.add_trace(go.Bar(x=recent_df["Date"], y=recent_df["Volume"], name="Actual Traded Volume", marker_color="#FF8533"))
-        fig_vol.add_trace(go.Scatter(x=recent_df["Date"], y=recent_df["Predicted_Volume"], name="Predicted Volume", mode="lines+markers", line=dict(color="#66B2FF", width=2.5, dash="dot")))
-        fig_vol.update_layout(
-            template="plotly_dark",
-            paper_bgcolor=CHART_BG,
-            plot_bgcolor=CHART_BG,
-            font=dict(color="#FFFFFF"),
-            height=440,
-            margin=dict(l=10, r=10, t=20, b=10),
-            uirevision=f"vol_{sel}",
-            transition_duration=0
-        )
-        fig_vol.update_xaxes(gridcolor=GRID_COLOR)
-        fig_vol.update_yaxes(gridcolor=GRID_COLOR)
-        st.plotly_chart(fig_vol, use_container_width=True, key=f"chart_vol_{sel}", config={"displayModeBar": False})
-
-with col_trade:
-    st.markdown("#### 📖 Level-2 Order Book")
-    p = stock["price"]
-    step = 0.50 if p > 100 else 0.10
-    ob_rng = random.Random(int(p * 100))
-    ob_html = '<div class="futu-card">'
-    for lvl in range(3, 0, -1):
-        ask_p = p + lvl * step
-        ask_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span>{ask_q:,}</span></div>'
-    ob_html += f'<div class="ob-row" style="background:#343B4E; font-weight:700;"><span>LAST</span><span class="{main_color_cls}">${p:.2f}</span><span>Lot: {stock["lot"]}</span></div>'
-    for lvl in range(1, 4):
-        bid_p = max(0.1, p - lvl * step)
-        bid_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span>{bid_q:,}</span></div>'
-    ob_html += '</div>'
-    st.markdown(ob_html, unsafe_allow_html=True)
-
-    st.markdown("#### 🎯 Execution Desk")
-    trade_method = st.selectbox(
-        "Trading Method",
-        [
-            "Spot Buy (Cash)",
-            "Spot Sell (Close Long)",
-            "Leveraged Multiplier (Margin Loan)",
-            "Short Sell (Bearish)",
-            "Cover Short Position",
-            "Banker Method (Institutional Block)"
-        ],
-        key="trade_method_select"
-    )
-
-    if trade_method == "Leveraged Multiplier (Margin Loan)":
-        margin_deposit = st.number_input("Cash Margin Deposit ($)", min_value=100.0, max_value=max(100.0, st.session_state.cash), value=min(5000.0, max(100.0, st.session_state.cash)), step=500.0, key="margin_dep_input")
-        multiplier = st.select_slider("Leverage Multiplier", options=[2, 5, 10, 20, 50, 100], value=10, key="lev_slider")
-        total_exposure = margin_deposit * multiplier
-        borrowed_margin = total_exposure - margin_deposit
-        est_shares = total_exposure / stock["price"]
-        st.caption(f"Exposure: ${total_exposure:,.2f} | Loan: ${borrowed_margin:,.2f}")
-    elif trade_method == "Banker Method (Institutional Block)":
-        block_shares = st.number_input("Institutional Block Size (Shares)", min_value=100, max_value=50000, value=500, step=100, key="block_shares_input")
-        discount_price = round(stock["price"] * 0.985, 2)
-        total_block_cost = block_shares * discount_price
-        st.caption(f"Discount Price (-1.5%): ${discount_price:,.2f} | Cost: ${total_block_cost:,.2f}")
-    else:
-        qty = st.number_input("Quantity (Shares)", min_value=1.0, max_value=100000.0, value=10.0, step=1.0, key="qty_input")
-        order_val = qty * stock["price"]
-        st.caption(f"Order Value: ${order_val:,.2f}")
-
-    if st.button("🚀 Execute Order Now", type="primary", use_container_width=True, key="exec_order_btn"):
-        if trade_method == "Spot Buy (Cash)":
-            cost = qty * stock["price"]
-            if st.session_state.cash >= cost:
-                st.session_state.cash -= cost
-                st.session_state.portfolio[sel] += qty
-                st.session_state.trade_history.insert(0, ("SPOT BUY", sel, qty, stock["price"], "Cash"))
-                st.success(f"Bought {qty} {sel} @ ${stock['price']:,.2f}")
-                st.rerun()
-            else:
-                st.error("Insufficient cash!")
-
-        elif trade_method == "Spot Sell (Close Long)":
-            if st.session_state.portfolio[sel] >= qty:
-                proceeds = qty * stock["price"]
-                if st.session_state.margin_debt[sel] > 0:
-                    ratio = qty / st.session_state.portfolio[sel]
-                    debt_repaid = st.session_state.margin_debt[sel] * ratio
-                    st.session_state.margin_debt[sel] -= debt_repaid
-                    net_proceeds = proceeds - debt_repaid
-                    st.session_state.cash += net_proceeds
-                else:
-                    st.session_state.cash += proceeds
-                st.session_state.portfolio[sel] -= qty
-                st.session_state.trade_history.insert(0, ("SPOT SELL", sel, qty, stock["price"], "Closed"))
-                st.success(f"Sold {qty} {sel} @ ${stock['price']:,.2f}")
-                st.rerun()
-            else:
-                st.error("Not enough shares held!")
-
-        elif trade_method == "Leveraged Multiplier (Margin Loan)":
-            if st.session_state.cash >= margin_deposit:
-                st.session_state.cash -= margin_deposit
-                st.session_state.portfolio[sel] += est_shares
-                st.session_state.margin_debt[sel] += borrowed_margin
-                st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares, 4), stock["price"], f"Loan ${borrowed_margin:,.0f}"))
-                st.success(f"Placed ${total_exposure:,.2f} ({multiplier}x) in {sel}!")
-                st.rerun()
-            else:
-                st.error("Insufficient cash for margin deposit!")
-
-        elif trade_method == "Short Sell (Bearish)":
-            proceeds = qty * stock["price"]
-            st.session_state.cash += proceeds
-            st.session_state.portfolio[sel] -= qty
-            st.session_state.trade_history.insert(0, ("SHORT SELL", sel, qty, stock["price"], "Short"))
-            st.warning(f"Shorted {qty} {sel} @ ${stock['price']:,.2f}")
-            st.rerun()
-
-        elif trade_method == "Cover Short Position":
-            if st.session_state.portfolio[sel] < 0:
-                cover_qty = min(qty, abs(st.session_state.portfolio[sel]))
-                cost = cover_qty * stock["price"]
+        if st.button("🚀 Execute Order Now", type="primary", use_container_width=True, key="exec_order_btn"):
+            if trade_method == "Spot Buy (Cash)":
+                cost = qty * stock["price"]
                 if st.session_state.cash >= cost:
                     st.session_state.cash -= cost
-                    st.session_state.portfolio[sel] += cover_qty
-                    st.session_state.trade_history.insert(0, ("COVER SHORT", sel, cover_qty, stock["price"], "Covered"))
-                    st.success(f"Covered {cover_qty} short shares of {sel}")
+                    st.session_state.portfolio[sel] += qty
+                    st.session_state.trade_history.insert(0, ("SPOT BUY", sel, qty, stock["price"], "Cash"))
+                    st.success(f"Bought {qty} {sel} @ ${stock['price']:,.2f}")
                     st.rerun()
                 else:
-                    st.error("Insufficient cash to cover!")
-            else:
-                st.error("No open short position for this stock.")
+                    st.error("Insufficient cash!")
 
-        elif trade_method == "Banker Method (Institutional Block)":
-            if st.session_state.bank_loan > 0:
-                st.error("❌ Rejected: Banker Method prohibited while active Bank Loan exists!")
-            elif st.session_state.cash < total_block_cost:
-                st.error("Insufficient cash for Institutional Block!")
-            else:
-                st.session_state.cash -= total_block_cost
-                st.session_state.portfolio[sel] += block_shares
-                st.session_state.trade_history.insert(0, ("BANKER BLOCK", sel, block_shares, discount_price, "Institutional -1.5%"))
-                st.success(f"Executed Banker Block for {block_shares} shares of {sel} @ ${discount_price:,.2f}!")
+            elif trade_method == "Spot Sell (Close Long)":
+                if st.session_state.portfolio[sel] >= qty:
+                    proceeds = qty * stock["price"]
+                    if st.session_state.margin_debt[sel] > 0:
+                        ratio = qty / st.session_state.portfolio[sel]
+                        debt_repaid = st.session_state.margin_debt[sel] * ratio
+                        st.session_state.margin_debt[sel] -= debt_repaid
+                        net_proceeds = proceeds - debt_repaid
+                        st.session_state.cash += net_proceeds
+                    else:
+                        st.session_state.cash += proceeds
+                    st.session_state.portfolio[sel] -= qty
+                    st.session_state.trade_history.insert(0, ("SPOT SELL", sel, qty, stock["price"], "Closed"))
+                    st.success(f"Sold {qty} {sel} @ ${stock['price']:,.2f}")
+                    st.rerun()
+                else:
+                    st.error("Not enough shares held!")
+
+            elif trade_method == "Leveraged Multiplier (Margin Loan)":
+                if st.session_state.cash >= margin_deposit:
+                    st.session_state.cash -= margin_deposit
+                    st.session_state.portfolio[sel] += est_shares
+                    st.session_state.margin_debt[sel] += borrowed_margin
+                    st.session_state.trade_history.insert(0, (f"{multiplier}x MARGIN", sel, round(est_shares, 4), stock["price"], f"Loan ${borrowed_margin:,.0f}"))
+                    st.success(f"Placed ${total_exposure:,.2f} ({multiplier}x) in {sel}!")
+                    st.rerun()
+                else:
+                    st.error("Insufficient cash for margin deposit!")
+
+            elif trade_method == "Short Sell (Bearish)":
+                proceeds = qty * stock["price"]
+                st.session_state.cash += proceeds
+                st.session_state.portfolio[sel] -= qty
+                st.session_state.trade_history.insert(0, ("SHORT SELL", sel, qty, stock["price"], "Short"))
+                st.warning(f"Shorted {qty} {sel} @ ${stock['price']:,.2f}")
                 st.rerun()
+
+            elif trade_method == "Cover Short Position":
+                if st.session_state.portfolio[sel] < 0:
+                    cover_qty = min(qty, abs(st.session_state.portfolio[sel]))
+                    cost = cover_qty * stock["price"]
+                    if st.session_state.cash >= cost:
+                        st.session_state.cash -= cost
+                        st.session_state.portfolio[sel] += cover_qty
+                        st.session_state.trade_history.insert(0, ("COVER SHORT", sel, cover_qty, stock["price"], "Covered"))
+                        st.success(f"Covered {cover_qty} short shares of {sel}")
+                        st.rerun()
+                    else:
+                        st.error("Insufficient cash to cover!")
+                else:
+                    st.error("No open short position for this stock.")
+
+            elif trade_method == "Banker Method (Institutional Block)":
+                if st.session_state.bank_loan > 0:
+                    st.error("❌ Rejected: Banker Method prohibited while active Bank Loan exists!")
+                elif st.session_state.cash < total_block_cost:
+                    st.error("Insufficient cash for Institutional Block!")
+                else:
+                    st.session_state.cash -= total_block_cost
+                    st.session_state.portfolio[sel] += block_shares
+                    st.session_state.trade_history.insert(0, ("BANKER BLOCK", sel, block_shares, discount_price, "Institutional -1.5%"))
+                    st.success(f"Executed Banker Block for {block_shares} shares of {sel} @ ${discount_price:,.2f}!")
+                    st.rerun()
+
+render_trading_terminal_fragment()
 
 # -----------------------------------------------------------------------------
 # 9. UNFILTERED MYSTERY NEWS WIRE & TABS
@@ -809,12 +815,12 @@ with tab_log:
         st.caption("No orders executed yet.")
 
 # -----------------------------------------------------------------------------
-# 10. BACKGROUND TICKER (ISOLATED MARKET STREAMING LOOP)
+# 10. NON-FLASHING ASYNCHRONOUS AUTO-STREAM LOOP
 # -----------------------------------------------------------------------------
 @st.fragment(run_every=refresh_sec)
-def background_market_ticker():
+def background_stream_loop():
     if live_market and not st.session_state.bankrupt:
         advance_market(refresh_sec)
         st.rerun()
 
-background_market_ticker()
+background_stream_loop()
