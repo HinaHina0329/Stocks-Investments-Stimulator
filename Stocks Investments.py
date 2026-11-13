@@ -8,10 +8,10 @@ import time
 from datetime import datetime, timedelta
 
 # -----------------------------------------------------------------------------
-# 1. PAGE CONFIG & SLATE CHARCOAL + CUSTOM UI COMPONENT CSS
+# 1. PAGE CONFIG & SLATE CHARCOAL + STRICT PURE WHITE / WHITE-BOX CSS
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="HinaHinaPro Pro Terminal",
+    page_title="HinaHinaPro Terminal",
     page_icon="🐂",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -19,16 +19,16 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Soft Light-Black / Slate Charcoal Background (#1E222D) */
+    /* Slate Charcoal Background (#1E222D) with Pure White Text (#FFFFFF) */
     .stApp {
         background-color: #1E222D;
-        color: #FFFFFF;
+        color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     section[data-testid="stSidebar"] {
         background-color: #252A37;
         border-right: 1px solid #363C4E;
-        color: #FFFFFF;
+        color: #FFFFFF !important;
     }
 
     /* Standard Buttons */
@@ -63,20 +63,20 @@ st.markdown("""
     }
     .futu-label {
         font-size: 12px;
-        color: #C5CEE0;
+        color: #FFFFFF !important;
         margin-bottom: 4px;
         font-weight: 500;
     }
     .futu-val {
         font-size: 18px;
         font-weight: 700;
-        color: #FFFFFF;
+        color: #FFFFFF !important;
     }
 
     /* Asian Market Colors: Red = Up, Green = Down */
     .up-color { color: #FF4D4F !important; }
     .down-color { color: #00D26A !important; }
-    .flat-color { color: #C5CEE0 !important; }
+    .flat-color { color: #FFFFFF !important; }
 
     .badge-up {
         background-color: rgba(255, 77, 79, 0.20);
@@ -138,19 +138,20 @@ st.markdown("""
 
     .news-item {
         background-color: #282E3D;
-        border-left: 3px solid #788296;
+        border-left: 3px solid #FFFFFF;
         padding: 12px 14px;
         margin-bottom: 10px;
         border-radius: 0 6px 6px 0;
         font-size: 14px;
-        color: #FFFFFF;
+        color: #FFFFFF !important;
         line-height: 1.45;
     }
     .news-time {
-        color: #A0ACB8;
+        color: #FFFFFF !important;
         font-size: 11px;
         margin-bottom: 4px;
         display: block;
+        opacity: 0.8;
     }
     .ob-row {
         display: flex;
@@ -158,6 +159,9 @@ st.markdown("""
         font-size: 13px;
         padding: 4px 8px;
         border-bottom: 1px solid #353B4B;
+    }
+    p, label, span, div, h1, h2, h3, h4, h5, h6 {
+        color: #FFFFFF !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -226,7 +230,7 @@ def generate_intraday_series(current_price, prev_close):
     })
 
 # -----------------------------------------------------------------------------
-# 3. FAIR-ROTATION NEWS ENGINE (1 NEWS PER STOCK PER ROUND, 15-18s INTERVALS)
+# 3. FAIR-ROTATION NEWS ENGINE (1 STOCK PER NEWS, 180-216S PER ROUND)
 # -----------------------------------------------------------------------------
 REAL_NEWS_POOL = [
     ("NVDA", "NVIDIA Board announces CEO Jensen Huang has stepped down; CFO Colette Kress appointed interim CEO.", -0.055),
@@ -273,8 +277,8 @@ FAKE_NEWS_POOL = [
 
 def get_next_fair_news():
     """
-    Guarantees every stock receives exactly 1 news item per round (12 stocks per round)
-    before any stock repeats. 
+    Ensures every stock receives exactly 1 news item per round (all 12 stocks)
+    before any stock repeats its turn.
     """
     if not st.session_state.news_queue:
         tickers = list(STOCK_CATALOG.keys())
@@ -339,18 +343,18 @@ def reset_simulation():
         st.session_state.history[sym] = df_hist
         st.session_state.intraday[sym] = generate_intraday_series(info["price"], prev_close)
 
-    st.session_state.news_feed = [get_next_fair_news() for _ in range(5)]
+    st.session_state.news_feed = [get_next_fair_news() for _ in range(3)]
     st.session_state.news_feed.reverse()
 
 if "stocks" not in st.session_state:
     reset_simulation()
 
-def advance_market(dt_sec=1.0):
+def advance_market(dt_sec=15.0):
     st.session_state.tick_count += dt_sec
     if st.session_state.bank_loan > 0:
         st.session_state.bank_loan += st.session_state.bank_loan * 0.00003 * dt_sec
 
-    # 15 to 18 seconds news interval logic
+    # News arrives every 15 to 18 seconds (exactly 1 news item per interval)
     st.session_state.next_news_in -= dt_sec
     active_news = None
     if st.session_state.next_news_in <= 0:
@@ -408,7 +412,7 @@ def advance_market(dt_sec=1.0):
 with st.sidebar:
     st.markdown("## 🐂 HinaHinaPro Terminal")
     live_market = st.toggle("🟢 Auto-Stream Market", value=True, key="live_market_toggle")
-    refresh_sec = 15.0  # Fixed 15-second chart refresh interval
+    refresh_sec = 15.0  # Fixed 15-second refresh interval
 
     # Watchlist directly below refresh speed
     st.markdown("### 📋 Watchlist (Click to Inspect)")
@@ -428,7 +432,7 @@ with st.sidebar:
     st.divider()
 
     if st.button("⚡ Advance 1 Market Tick", use_container_width=True):
-        advance_market(1.0)
+        advance_market(15.0)
         st.rerun()
 
     st.divider()
@@ -537,7 +541,7 @@ st.markdown(f"""
 <div class="futu-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
     <div>
         <span style="font-size:24px; font-weight:800; color:#FFFFFF;">{stock['name']}</span>
-        <span style="font-size:16px; color:#C5CEE0; margin-left:8px;">({sel} · {stock['market']})</span>
+        <span style="font-size:16px; color:#FFFFFF; margin-left:8px; opacity:0.8;">({sel} · {stock['market']})</span>
         <span style="background:#363C4E; color:#FFFFFF; font-size:12px; padding:3px 9px; border-radius:4px; margin-left:10px;">
             {stock['sector']}
         </span>
@@ -623,7 +627,7 @@ with col_chart:
             line=dict(color=line_col, width=2.4), fill="tozeroy",
             fillcolor="rgba(255,77,79,0.14)" if is_up else "rgba(0,210,106,0.14)", name="Price"
         ))
-        fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#C5CEE0", annotation_text="Prev Close")
+        fig_intra.add_hline(y=stock["prev_close"], line_dash="dash", line_color="#FFFFFF", annotation_text="Prev Close")
         fig_intra.update_layout(
             template="plotly_dark",
             paper_bgcolor=CHART_BG,
@@ -666,12 +670,12 @@ with col_trade:
     for lvl in range(3, 0, -1):
         ask_p = p + lvl * step
         ask_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span>{ask_q:,}</span></div>'
-    ob_html += f'<div class="ob-row" style="background:#343B4E; font-weight:700;"><span>LAST</span><span class="{main_color_cls}">${p:.2f}</span><span>Lot: {stock["lot"]}</span></div>'
+        ob_html += f'<div class="ob-row"><span style="color:#FFFFFF;">Ask {lvl}</span><span class="down-color">${ask_p:.2f}</span><span style="color:#FFFFFF;">{ask_q:,}</span></div>'
+    ob_html += f'<div class="ob-row" style="background:#343B4E; font-weight:700;"><span style="color:#FFFFFF;">LAST</span><span class="{main_color_cls}">${p:.2f}</span><span style="color:#FFFFFF;">Lot: {stock["lot"]}</span></div>'
     for lvl in range(1, 4):
         bid_p = max(0.1, p - lvl * step)
         bid_q = ob_rng.randint(15, 150) * stock["lot"]
-        ob_html += f'<div class="ob-row"><span style="color:#C5CEE0;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span>{bid_q:,}</span></div>'
+        ob_html += f'<div class="ob-row"><span style="color:#FFFFFF;">Bid {lvl}</span><span class="up-color">${bid_p:.2f}</span><span style="color:#FFFFFF;">{bid_q:,}</span></div>'
     ob_html += '</div>'
     st.markdown(ob_html, unsafe_allow_html=True)
 
